@@ -81,6 +81,7 @@ add_executable(ShredEQUnitTests
     tests/DynamicEQTests.cpp
     tests/TightCutTests.cpp
     tests/ChugStabilizerTests.cpp
+    tests/DbgTests.cpp
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
     Source/DSP/BiquadCoefficients.cpp

@@ -1,9 +1,10 @@
 # CMake and CLion build output
-/build/
-/build-*/
-/cmake-build-*/
-/Builds/
-/out/
+build/
+build-*/
+cmake-build-*/
+Builds/
+out/
+state/
 
 # IDE state
 /.idea/

@@ -1,7 +1,27 @@
 # ShredEQ
 
-Professional adaptive parametric, dynamic, and multiband equalizer for electric guitar and bass.
+Zero-latency adaptive parametric, dynamic, and multiband EQ for guitar/bass.
+Developed by nSpace Systems.
 
-## Status
+Built with C++20 and JUCE, supporting VST3 and Standalone formats.
 
-Product specification complete. Implementation planning and development pending.
+## Build Instructions
+
+1. Initialize submodules:
+   ```bash
+   git submodule update --init --recursive
+   ```
+
+2. Configure and build using CMake presets:
+   ```bash
+   cmake --preset <your-preset>
+   cmake --build --preset <your-build-preset>
+   ```
+   Alternatively, use the provided build script:
+   ```bash
+   scripts/build_all.sh
+   ```
+
+## Documentation
+
+Full technical specifications are located in `SHREDEQ_SPEC.md` and the `.abracapocus` state.

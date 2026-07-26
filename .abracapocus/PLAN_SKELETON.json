@@ -1,0 +1,318 @@
+{
+  "plan_name": "SHREDEQ",
+  "purpose": "Build ShredEQ: a zero-latency adaptive parametric, dynamic, and multiband equalizer for electric guitar and bass. C++20/JUCE plugin targeting VST3 and Standalone with external sidechain and MIDI input. 12-band parametric EQ with per-band dynamics, 4-zone multiband engine, Tight Cut resonant HPF, Chug Stabilizer, resonance/anti-fizz scanner with shared spectral analysis subsystem, note/harmonic follower, external-sidechain masking, stage-level M/S processing, optional lookahead with PDC, spectral percentile cloud analyzer, headroom histogram, and a diagnostic GUI with three view modes. Full product specification in SHREDEQ_SPEC.md.",
+  "async_strategy": "Phases run sequentially. Within each phase, tasks with disjoint write paths run in parallel waves. Fan-in tasks (processBlock wiring, editor integration) depend on all upstream tasks in the same phase and are the sole owner of CMakeLists.txt, PluginProcessor, and PluginEditor within that phase. The C++ language adapter provides cmake/ctest verification inference — task verification_commands arrays are left empty.",
+  "cost_estimate": "medium-high",
+  "operator_questions": [],
+  "phases": [
+    {
+      "phase_id": "a",
+      "goal": "Project scaffold, build system, APVTS parameter infrastructure, and state engine.\n\nCreate the ShredEQ JUCE plugin project. Inspect ShredBoost and ShredSpace CMakeLists.txt for the known-working structure and follow the same conventions for plugin code, manufacturer code, company name, bundle ID, version, and copy-after-build policy.\n\nCMakeLists.txt: juce_add_plugin targeting VST3 + Standalone. Enable NEEDS_MIDI_INPUT for host MIDI note following. CMakePresets.json with RelWithDebInfo configure preset and matching build/test presets. scripts/build_all.sh. JUCE as a git submodule.\n\nPluginProcessor: configure main input bus, optional sidechain input bus, and output through AudioProcessor::BusesProperties. Implement isBusesLayoutSupported for mono, stereo, and stereo+sidechain layouts. Standalone must operate safely without sidechain. Constructor creates APVTS, processBlock stub, state save/restore with schema versioning.\n\nParameterIDs.h: complete stable parameter inventory for all v1.0 automatable controls. 12 bands x full parameter set (enabled, stage, type, frequency, gain, q, slope, route, dynamicMode, dynamicRange, threshold, ratio, attack, hold, release, knee, detectorSource, detectorFrequency, detectorQ, trackingSource, trackingHarmonic, lookahead). Global params: inputGain, outputGain, globalBypass, analyzerEnable, abState, profileIndex, tuningIndex. Tight Cut: enabled, frequency, slope, resonance, punchRatio, punchGain, punchQ, placement, routing, listenRemoved. Chug Stabilizer: enabled, frequency, bandwidth, maxReduction, threshold, attack, hold, release, preservePick, transientSens, dominanceSens. Multiband: enabled, crossover1-3 freq, per-zone gain/threshold/ratio/attack/release/transientEmphasis/sustainEmphasis/placement/detectorSource/autoThreshold/mode. Sidechain: source, lockInEnabled, lockInAmount, carveMaxGain, carveThreshold. M/S: sideHighPass, monoGuardEnabled, monoGuardProtection. Resonance suppressor: 6 slots x (enabled, frequency, q, maxDepth, attack, release, persistence, mode, placement, freeze). Note follower: trackingSource, harmonic, centsOffset, confidenceThreshold, smoothing, holdTime, returnTime, minFreq, maxFreq, midiPriority. Lookahead: mode (off/0.5/1/2/5ms). Output trim.\n\nState engine: XML state with schema_version, A/B slots, factory presets loaded from Resources/Presets/ (read-only), user presets use juce::File::getSpecialLocation for per-user app data. .gitignore: build/, cmake-build-*, state/, .abracapocus/state/, .abracapocus/logs/, .abracapocus/reports/.",
+      "expected_changed_files": [
+        "CMakeLists.txt",
+        "CMakePresets.json",
+        "scripts/build_all.sh",
+        "Source/PluginProcessor.h",
+        "Source/PluginProcessor.cpp",
+        "Source/PluginEditor.h",
+        "Source/PluginEditor.cpp",
+        "Source/ParameterIDs.h",
+        "Source/StateManager.h",
+        "Source/StateManager.cpp",
+        "README.md",
+        ".gitignore",
+        ".gitmodules",
+        "tests/TestMain.cpp"
+      ],
+      "async_notes": "Wave 1: a.1 (CMakeLists + build + JUCE submodule) and a.4 (.gitignore + README + TestMain) are independent. Wave 2: a.2 (ParameterIDs + APVTS + PluginProcessor) depends on a.1. Wave 3: a.3 (StateManager + PluginEditor) depends on a.2. a.2 is the sole owner of CMakeLists.txt, PluginProcessor, and ParameterIDs in this phase.",
+      "risk_notes": "CMakeLists.txt is shared build root — a.2 is sole owner. JUCE submodule add requires network. Sidechain bus requires correct isBusesLayoutSupported.",
+      "estimated_task_count": 4,
+      "task_hints": [
+        {"title": "CMakeLists.txt, CMakePresets.json, build scripts, JUCE submodule", "selected_backend": "codex_cli"},
+        {"title": "ParameterIDs (complete v1.0 inventory), APVTS, PluginProcessor with sidechain and MIDI bus", "selected_backend": "codex_cli"},
+        {"title": "StateManager (A/B, factory/user presets, schema versioning) and PluginEditor skeleton", "selected_backend": "antigravity_cli"},
+        {"title": "gitignore, README, TestMain.cpp", "selected_backend": "pi_cli", "model": "openrouter/google/gemma-4-31b-it"}
+      ]
+    },
+    {
+      "phase_id": "b",
+      "goal": "Parametric EQ engine: coefficient library, TPT state-variable filters, 12-band parametric system, and cascade response.\n\nBiquad coefficient library (Source/DSP/BiquadCoefficients.h/.cpp): RBJ Audio EQ Cookbook coefficients for all filter types. Slope support requires both first-order and second-order sections: 6dB/oct = one first-order, 12dB/oct = one biquad, 18dB/oct = first-order + biquad, 24dB/oct = two biquads, 36dB/oct = three biquads, 48dB/oct = four biquads. Use standard RBJ coefficient formulas for v1.0. Test actual magnitude response near Nyquist rather than claiming arbitrary analog matching.\n\nTPT state-variable filter (Source/DSP/TPTFilter.h/.cpp): topology-preserving transform for modulation-stable sweeps. Bell, shelf, LP, HP, BP.\n\nParametric band class (Source/DSP/ParametricBand.h/.cpp): wraps biquad cascade or TPT per band. Holds: enabled, stageA/B, frequency, gain, Q, type, slope, stereo routing MODE (linked/unlinked/L/R/mid/side). Bands do NOT perform their own M/S encoding — they process whichever channel domain the stage router provides. 12 bands total.\n\nResponse computer (Source/DSP/ResponseComputer.h/.cpp): composite H(e^jw) at ~512 log-spaced points on message thread.\n\nAll DSP: juce::SmoothedValue, no heap allocation in process methods.",
+      "expected_changed_files": [
+        "Source/DSP/BiquadCoefficients.h",
+        "Source/DSP/BiquadCoefficients.cpp",
+        "Source/DSP/TPTFilter.h",
+        "Source/DSP/TPTFilter.cpp",
+        "Source/DSP/ParametricBand.h",
+        "Source/DSP/ParametricBand.cpp",
+        "Source/DSP/ResponseComputer.h",
+        "Source/DSP/ResponseComputer.cpp",
+        "CMakeLists.txt",
+        "tests/BiquadTests.cpp",
+        "tests/ParametricBandTests.cpp"
+      ],
+      "async_notes": "Wave 1: b.1 (BiquadCoefficients) and b.2 (TPTFilter) are independent new modules. Wave 2: b.3 (ParametricBand) depends on b.1, b.2. Wave 3: b.4 (ResponseComputer) depends on b.3. b.4 is sole owner of CMakeLists.txt. Wave 4: b.5 (tests) depends on b.1, b.2, b.3.",
+      "risk_notes": "CMakeLists.txt updated by b.4 only. First-order filter sections needed alongside biquads.",
+      "estimated_task_count": 5,
+      "task_hints": [
+        {"title": "BiquadCoefficients — all RBJ types, first-order and second-order sections, cascaded slopes", "selected_backend": "codex_cli"},
+        {"title": "TPT state-variable filter — modulation-stable bell, shelf, LP, HP, BP", "selected_backend": "codex_cli"},
+        {"title": "ParametricBand — 12 bands, filter selection, stereo routing mode (no per-band M/S encode)", "selected_backend": "antigravity_cli"},
+        {"title": "ResponseComputer — cascade frequency response for GUI, CMakeLists update", "selected_backend": "antigravity_cli"},
+        {"title": "Biquad coefficient and parametric band unit tests", "selected_backend": "pi_cli", "model": "openrouter/z-ai/glm-5.2"}
+      ]
+    },
+    {
+      "phase_id": "c",
+      "goal": "Per-band dynamic EQ: envelope followers, soft-knee gain computation, transient/sustain separation, and dynamic processor integration.\n\nEnvelope follower (Source/DSP/EnvelopeFollower.h/.cpp): attack/release with configurable ballistics. Soft-knee gain computation. Transient/sustain separation via fast and slow envelopes.\n\nDynamic processor (Source/DSP/DynamicProcessor.h/.cpp): wraps envelope + gain per band. All modes: static, downward/upward dynamic, compression, expansion, transient-only, sustain-only, sidechained. All detector sources.\n\nIntegrate into ParametricBand. Dynamic visualization data struct for GUI.\n\nSee SHREDEQ_SPEC.md sections 4.1-4.5 for complete DSP math.",
+      "expected_changed_files": [
+        "Source/DSP/EnvelopeFollower.h",
+        "Source/DSP/EnvelopeFollower.cpp",
+        "Source/DSP/DynamicProcessor.h",
+        "Source/DSP/DynamicProcessor.cpp",
+        "Source/DSP/ParametricBand.h",
+        "Source/DSP/ParametricBand.cpp",
+        "CMakeLists.txt",
+        "tests/DynamicEQTests.cpp"
+      ],
+      "async_notes": "Wave 1: c.1 (EnvelopeFollower + gain + transient/sustain) standalone. Wave 2: c.2 (DynamicProcessor) depends on c.1. Wave 3: c.3 (ParametricBand integration + CMakeLists) depends on c.2. Wave 4: c.4 (tests) depends on c.1, c.2.",
+      "risk_notes": "ParametricBand modified — c.3 serialized after phase B. c.3 is sole CMakeLists owner.",
+      "estimated_task_count": 4,
+      "task_hints": [
+        {"title": "EnvelopeFollower, soft-knee gain, transient/sustain separation", "selected_backend": "codex_cli"},
+        {"title": "DynamicProcessor — all modes, detector sources, gain modulation", "selected_backend": "antigravity_cli"},
+        {"title": "ParametricBand dynamic integration, visualization data, CMakeLists update", "selected_backend": "antigravity_cli"},
+        {"title": "Dynamic EQ unit tests", "selected_backend": "pi_cli", "model": "openrouter/z-ai/glm-5.2"}
+      ]
+    },
+    {
+      "phase_id": "d",
+      "goal": "Tight Cut resonant HPF with punch bell, and Chug Stabilizer.\n\nSee SHREDEQ_SPEC.md sections 6 and 7 for complete architecture and DSP math.\n\nTight Cut (Source/DSP/TightCut.h/.cpp): resonant HPF + linked punch bell. Listen-to-removed mode.\n\nChug Stabilizer (Source/DSP/ChugStabilizer.h/.cpp): palm-mute detection and dynamic reduction with Preserve Pick.\n\nWire both into PluginProcessor between input conditioning and parametric Stage A.",
+      "expected_changed_files": [
+        "Source/DSP/TightCut.h",
+        "Source/DSP/TightCut.cpp",
+        "Source/DSP/ChugStabilizer.h",
+        "Source/DSP/ChugStabilizer.cpp",
+        "Source/PluginProcessor.h",
+        "Source/PluginProcessor.cpp",
+        "CMakeLists.txt",
+        "tests/TightCutTests.cpp",
+        "tests/ChugStabilizerTests.cpp"
+      ],
+      "async_notes": "Wave 1: d.1 (TightCut) and d.2 (ChugStabilizer) independent. Wave 2: d.3 (PluginProcessor + CMakeLists wiring) depends on d.1, d.2 — sole owner of Processor and CMakeLists. Wave 3: d.4 (tests) depends on d.1, d.2.",
+      "risk_notes": "PluginProcessor fan-in in d.3.",
+      "estimated_task_count": 4,
+      "task_hints": [
+        {"title": "TightCut — resonant HPF, linked punch bell, listen-to-removed, routing", "selected_backend": "codex_cli"},
+        {"title": "ChugStabilizer — detection model, dynamic reduction, Preserve Pick", "selected_backend": "codex_cli"},
+        {"title": "PluginProcessor wiring and CMakeLists for TightCut and ChugStabilizer", "selected_backend": "antigravity_cli"},
+        {"title": "TightCut and ChugStabilizer tests", "selected_backend": "pi_cli", "model": "openrouter/z-ai/glm-5.2"}
+      ]
+    },
+    {
+      "phase_id": "e",
+      "goal": "Four-zone multiband engine with LR4 crossovers and per-zone dynamics.\n\nSee SHREDEQ_SPEC.md section 5 for full architecture.\n\nLR4 crossover (Source/DSP/MultibandCrossover.h/.cpp): complementary serial tree, click-free movement, ordering protection. Reconstruction test: all zones unity = flat magnitude (tolerance-based, not sample-identical — LR4 has flat magnitude but frequency-dependent phase).\n\nZone processing (Source/DSP/MultibandZone.h/.cpp): per-zone dynamics reusing EnvelopeFollower.\n\nMultiband engine (Source/DSP/MultibandEngine.h/.cpp): orchestrates split, zone processing, recombination.",
+      "expected_changed_files": [
+        "Source/DSP/MultibandCrossover.h",
+        "Source/DSP/MultibandCrossover.cpp",
+        "Source/DSP/MultibandZone.h",
+        "Source/DSP/MultibandZone.cpp",
+        "Source/DSP/MultibandEngine.h",
+        "Source/DSP/MultibandEngine.cpp",
+        "Source/PluginProcessor.h",
+        "Source/PluginProcessor.cpp",
+        "CMakeLists.txt",
+        "tests/MultibandTests.cpp"
+      ],
+      "async_notes": "Wave 1: e.1 (MultibandCrossover) standalone. Wave 2: e.2 (MultibandZone) depends on e.1. Wave 3: e.3 (MultibandEngine + processBlock + CMakeLists) depends on e.1, e.2 — sole owner of Processor and CMakeLists. Wave 4: e.4 (tests) depends on all.",
+      "risk_notes": "PluginProcessor fan-in in e.3.",
+      "estimated_task_count": 4,
+      "task_hints": [
+        {"title": "LR4 crossover — complementary serial tree, smooth interpolation", "selected_backend": "codex_cli"},
+        {"title": "MultibandZone — per-zone dynamics, controls", "selected_backend": "antigravity_cli"},
+        {"title": "MultibandEngine, processBlock integration, CMakeLists", "selected_backend": "antigravity_cli"},
+        {"title": "Multiband reconstruction and crossover tests", "selected_backend": "pi_cli", "model": "openrouter/z-ai/glm-5.2"}
+      ]
+    },
+    {
+      "phase_id": "f",
+      "goal": "Note and harmonic follower with pitch detection. MUST be implemented before resonance detection because the resonance system's musical-harmonic rejection depends on an estimated f0.\n\nPitch detector (Source/DSP/PitchDetector.h/.cpp): YIN algorithm on conditioned downsampled signal. Runs at lower control rate on background thread. Audio thread supplies frames via lock-free FIFO. Returns: estimated frequency, confidence, timestamp, tracking state.\n\nMIDI note tracking: f0 = 440*2^((m-69)/12) from host MIDI. Priority: lowest/highest/last.\n\nNote follower (Source/DSP/NoteFollower.h/.cpp): harmonic targeting f_target = f0*h*2^(c/1200). Log-frequency smoothing. Confidence handling. Integrate into ParametricBand: any band can optionally attach a NoteFollower.\n\nSee SHREDEQ_SPEC.md section 9 for complete DSP math.",
+      "expected_changed_files": [
+        "Source/DSP/PitchDetector.h",
+        "Source/DSP/PitchDetector.cpp",
+        "Source/DSP/NoteFollower.h",
+        "Source/DSP/NoteFollower.cpp",
+        "Source/DSP/ParametricBand.h",
+        "Source/DSP/ParametricBand.cpp",
+        "CMakeLists.txt",
+        "tests/PitchTrackingTests.cpp"
+      ],
+      "async_notes": "Wave 1: f.1 (PitchDetector) standalone. Wave 2: f.2 (NoteFollower + ParametricBand integration + CMakeLists) depends on f.1. Wave 3: f.3 (tests) depends on f.1, f.2.",
+      "risk_notes": "ParametricBand modified — serialize after phases B-C. PitchDetector background thread shares pattern with later analyzer threads.",
+      "estimated_task_count": 3,
+      "task_hints": [
+        {"title": "PitchDetector — YIN algorithm, control-rate thread, lock-free FIFO", "selected_backend": "codex_cli"},
+        {"title": "NoteFollower, harmonic targeting, ParametricBand integration, CMakeLists", "selected_backend": "antigravity_cli"},
+        {"title": "Pitch tracking and note follower tests", "selected_backend": "pi_cli", "model": "openrouter/z-ai/glm-5.2"}
+      ]
+    },
+    {
+      "phase_id": "g",
+      "goal": "Resonance detection, anti-fizz suppression, and shared spectral analysis subsystem.\n\nShared spectral analysis engine (Source/Analysis/SpectralAnalysisEngine.h/.cpp, Source/Analysis/AnalysisFifo.h/.cpp): STFT with Hann window, configurable FFT size, hop. Background thread receives audio via juce::AbstractFifo. This is the SINGLE spectral subsystem — resonance detector, percentile cloud, spectrum display, persistence map, and sidechain collision analysis all consume data from this service. Skip frames when overloaded. Fixed memory bounds.\n\nResonance detector (Source/DSP/ResonanceDetector.h/.cpp): persistence analysis, candidate scoring. Musical-harmonic rejection uses PitchDetector f0 from phase F — fixed peaks that persist across different notes get higher confidence than peaks following harmonics.\n\nSuppressor slots (Source/DSP/ResonanceSuppressor.h/.cpp): 6 dynamic notch filters. Scan workflow with candidate cards.\n\nSee SHREDEQ_SPEC.md section 8 for complete DSP math.",
+      "expected_changed_files": [
+        "Source/Analysis/SpectralAnalysisEngine.h",
+        "Source/Analysis/SpectralAnalysisEngine.cpp",
+        "Source/Analysis/AnalysisFifo.h",
+        "Source/Analysis/AnalysisFifo.cpp",
+        "Source/DSP/ResonanceDetector.h",
+        "Source/DSP/ResonanceDetector.cpp",
+        "Source/DSP/ResonanceSuppressor.h",
+        "Source/DSP/ResonanceSuppressor.cpp",
+        "Source/PluginProcessor.h",
+        "Source/PluginProcessor.cpp",
+        "CMakeLists.txt",
+        "tests/ResonanceTests.cpp"
+      ],
+      "async_notes": "Wave 1: g.1 (SpectralAnalysisEngine + AnalysisFifo) standalone. Wave 2: g.2 (ResonanceDetector) depends on g.1 and uses PitchDetector from phase F. Wave 3: g.3 (ResonanceSuppressor + scan + processBlock + CMakeLists) depends on g.2 — sole Processor/CMakeLists owner. Wave 4: g.4 (tests) depends on all.",
+      "risk_notes": "SpectralAnalysisEngine introduces background thread and AbstractFifo. PluginProcessor fan-in in g.3. ResonanceDetector depends on PitchDetector from phase F.",
+      "estimated_task_count": 4,
+      "task_hints": [
+        {"title": "SpectralAnalysisEngine and AnalysisFifo — shared STFT, background thread, multi-consumer", "selected_backend": "codex_cli"},
+        {"title": "ResonanceDetector — persistence, harmonic rejection using PitchDetector f0, scoring", "selected_backend": "codex_cli"},
+        {"title": "ResonanceSuppressor, scan workflow, processBlock wiring, CMakeLists", "selected_backend": "antigravity_cli"},
+        {"title": "Resonance detection and suppression tests", "selected_backend": "pi_cli", "model": "openrouter/z-ai/glm-5.2"}
+      ]
+    },
+    {
+      "phase_id": "h",
+      "goal": "External sidechain masking, stage-level M/S processing, and optional lookahead with PDC.\n\nStage-level M/S router (Source/DSP/MidSideRouter.h/.cpp): performs M/S encode/decode ONCE around the parametric stages, not per-band. Bands process whichever domain the router provides. Side high-pass (configurable 120-300Hz) lives in the router.\n\nSidechain masking analyzer (Source/DSP/SidechainAnalyzer.h/.cpp): ERB/octave band accumulation, overlap/dominance/masking metrics. Collision map data for GUI.\n\nMasking carver (Source/DSP/MaskingCarver.h/.cpp): applies bounded carve gains using a small number of dynamic bell filters. Suggestion mode converts collisions into editable parametric bands. Auto mode applies only explicitly enabled carver bands.\n\nMono Guard (Source/DSP/MonoGuard.h/.cpp): frequency-dependent L/R coherence, protection mode.\n\nLookahead delay (Source/DSP/LookaheadDelay.h/.cpp): preallocated circular buffer. Off, 0.5, 1, 2, 5ms. Reports exact latency via setLatencySamples. Zero samples when disabled. Click-free delay changes.\n\nWire all into processBlock. v1.0 uses host external sidechain only.",
+      "expected_changed_files": [
+        "Source/DSP/MidSideRouter.h",
+        "Source/DSP/MidSideRouter.cpp",
+        "Source/DSP/SidechainAnalyzer.h",
+        "Source/DSP/SidechainAnalyzer.cpp",
+        "Source/DSP/MaskingCarver.h",
+        "Source/DSP/MaskingCarver.cpp",
+        "Source/DSP/MonoGuard.h",
+        "Source/DSP/MonoGuard.cpp",
+        "Source/DSP/LookaheadDelay.h",
+        "Source/DSP/LookaheadDelay.cpp",
+        "Source/PluginProcessor.h",
+        "Source/PluginProcessor.cpp",
+        "CMakeLists.txt",
+        "tests/MidSideTests.cpp",
+        "tests/LookaheadTests.cpp"
+      ],
+      "async_notes": "Wave 1: h.1 (MidSideRouter) and h.2 (SidechainAnalyzer + MaskingCarver) and h.3 (LookaheadDelay) are independent. Wave 2: h.4 (MonoGuard) depends on h.1. Wave 3: h.5 (processBlock wiring + CMakeLists) depends on all — sole Processor/CMakeLists owner. Wave 4: h.6 (tests) depends on h.1, h.2, h.3.",
+      "risk_notes": "PluginProcessor heavily modified — fan-in in h.5. Lookahead must call setLatencySamples. Sidechain gracefully skipped in standalone.",
+      "estimated_task_count": 6,
+      "task_hints": [
+        {"title": "MidSideRouter — stage-level encode/decode, side high-pass", "selected_backend": "antigravity_cli"},
+        {"title": "SidechainAnalyzer and MaskingCarver — masking metric, bounded carve, suggestion mode", "selected_backend": "codex_cli"},
+        {"title": "LookaheadDelay — circular buffer, setLatencySamples, click-free changes", "selected_backend": "codex_cli"},
+        {"title": "MonoGuard — frequency-dependent coherence, protection mode", "selected_backend": "antigravity_cli"},
+        {"title": "processBlock wiring for M/S, sidechain, lookahead, CMakeLists", "selected_backend": "antigravity_cli"},
+        {"title": "M/S, sidechain masking, and lookahead tests", "selected_backend": "pi_cli", "model": "openrouter/z-ai/glm-5.2"}
+      ]
+    },
+    {
+      "phase_id": "i",
+      "goal": "Analyzer data pipeline: percentile cloud, headroom histogram, resonance persistence map, stereo coherence. Reuses the shared SpectralAnalysisEngine from phase G.\n\nPercentile Cloud (Source/UI/PercentileCloud.h/.cpp): ring buffer percentile computation from SpectralAnalysisEngine frames. 10th/50th/90th percentiles. Dynamic Range Map D(f) = Q_90 - Q_10. History: 2s-30s, frozen, scan.\n\nHeadroom Histogram (Source/UI/HeadroomHistogram.h/.cpp): output amplitude distribution, L/R/mono, peak/RMS/crest.\n\nResonance Persistence Map (Source/UI/ResonancePersistenceMap.h/.cpp): scrolling freq×time, resonance excess intensity.\n\nStereo coherence + note ruler data. Analyzer quality modes (Off/Live/Studio/Analysis). All computation on background/message thread.",
+      "expected_changed_files": [
+        "Source/UI/PercentileCloud.h",
+        "Source/UI/PercentileCloud.cpp",
+        "Source/UI/HeadroomHistogram.h",
+        "Source/UI/HeadroomHistogram.cpp",
+        "Source/UI/ResonancePersistenceMap.h",
+        "Source/UI/ResonancePersistenceMap.cpp",
+        "Source/PluginProcessor.cpp",
+        "CMakeLists.txt",
+        "tests/AnalyzerTests.cpp"
+      ],
+      "async_notes": "Wave 1: i.1 (PercentileCloud) and i.2 (HeadroomHistogram) are independent — both consume from SpectralAnalysisEngine. Wave 2: i.3 (ResonancePersistenceMap + stereo coherence + note ruler + CMakeLists) depends on SpectralAnalysisEngine existing. Wave 3: i.4 (tests) depends on all.",
+      "risk_notes": "Reuses SpectralAnalysisEngine from phase G — no new FFT engine. Processor modified only for analyzer tap data push.",
+      "estimated_task_count": 4,
+      "task_hints": [
+        {"title": "PercentileCloud — ring buffer percentiles, dynamic range map, history modes", "selected_backend": "codex_cli"},
+        {"title": "HeadroomHistogram — amplitude distribution, peak/RMS/crest, L/R/mono", "selected_backend": "antigravity_cli"},
+        {"title": "ResonancePersistenceMap, stereo coherence, note ruler, CMakeLists", "selected_backend": "antigravity_cli"},
+        {"title": "Analyzer data pipeline tests", "selected_backend": "pi_cli", "model": "openrouter/z-ai/glm-5.2"}
+      ]
+    },
+    {
+      "phase_id": "j",
+      "goal": "GUI: LookAndFeel, main EQ workspace, band nodes, inspector, Guitar Intelligence drawer, view modes, editor layout.\n\nSee SHREDEQ_SPEC.md section 13 for complete GUI specification. Correct LookAndFeel_V4 overrides with individual parameters (not PopupMenu::Item API). Default 1360x820, min 980x620, resizable, high-DPI.",
+      "expected_changed_files": [
+        "Source/UI/ShredEQLookAndFeel.h",
+        "Source/UI/ShredEQLookAndFeel.cpp",
+        "Source/UI/EQWorkspace.h",
+        "Source/UI/EQWorkspace.cpp",
+        "Source/UI/BandNode.h",
+        "Source/UI/BandNode.cpp",
+        "Source/UI/InspectorPanel.h",
+        "Source/UI/InspectorPanel.cpp",
+        "Source/UI/IntelligenceDrawer.h",
+        "Source/UI/IntelligenceDrawer.cpp",
+        "Source/PluginEditor.h",
+        "Source/PluginEditor.cpp",
+        "CMakeLists.txt"
+      ],
+      "async_notes": "Wave 1: j.1 (LookAndFeel) standalone. Wave 2: j.2 (EQWorkspace + BandNode) and j.3 (InspectorPanel) depend on j.1 but independent of each other. Wave 3: j.4 (IntelligenceDrawer) depends on j.1. Wave 4: j.5 (PluginEditor assembly) fan-in — sole Editor/CMakeLists owner.",
+      "risk_notes": "Phase J is antigravity-heavy. PluginEditor fan-in in j.5. Known JUCE API: drawPopupMenuItem signature.",
+      "estimated_task_count": 5,
+      "task_hints": [
+        {"title": "ShredEQLookAndFeel — suite visual identity, analytical palette, correct JUCE overrides", "selected_backend": "antigravity_cli"},
+        {"title": "EQWorkspace and BandNode — graph, response curves, draggable nodes", "selected_backend": "antigravity_cli"},
+        {"title": "InspectorPanel — full-width parameter editor for selected band", "selected_backend": "antigravity_cli"},
+        {"title": "IntelligenceDrawer — Tight Cut, Chug, Resonance, Follower, Lock-In panels", "selected_backend": "antigravity_cli"},
+        {"title": "PluginEditor assembly — view modes, header, resizing, wiring, CMakeLists", "selected_backend": "antigravity_cli"}
+      ]
+    },
+    {
+      "phase_id": "k",
+      "goal": "A/B comparison, gain-matched bypass, profiles, factory presets, and delta audition.\n\nA/B state + gain-matched bypass: extend StateManager. Click-safe crossfade. Rolling RMS measurement.\n\nProfile system: placement + tuning profiles. See SHREDEQ_SPEC.md sections 15, 25.\n\nFactory presets: categorized, gain-conscious. Resources/Presets/.\n\nDelta audition: wire RejectedSignalRouter modes to GUI.",
+      "expected_changed_files": [
+        "Source/StateManager.h",
+        "Source/StateManager.cpp",
+        "Source/Profiles.h",
+        "Source/Profiles.cpp",
+        "Source/PluginProcessor.h",
+        "Source/PluginProcessor.cpp",
+        "Source/PluginEditor.cpp",
+        "CMakeLists.txt",
+        "Resources/Presets/PreAmp_TightSixString.json",
+        "Resources/Presets/Rhythm_ModernCleanup.json",
+        "Resources/Presets/Lead_SingingFocus.json",
+        "Resources/Presets/Bass_ClangControl.json",
+        "Resources/Presets/Diag_FindResonances.json",
+        "tests/StateTests.cpp"
+      ],
+      "async_notes": "Wave 1: k.1 (A/B + gain match) and k.2 (Profiles) are independent. Wave 2: k.3 (factory presets) depends on k.2 for profile categories. Wave 3: k.4 (delta audition + processBlock wiring + CMakeLists) depends on k.1 — sole Processor/Editor/CMakeLists owner. Wave 4: k.5 (tests) depends on all.",
+      "risk_notes": "StateManager, PluginProcessor, PluginEditor modified — k.4 is fan-in.",
+      "estimated_task_count": 5,
+      "task_hints": [
+        {"title": "A/B state engine, gain-matched bypass measurement", "selected_backend": "codex_cli"},
+        {"title": "Profile system — placement and tuning profiles", "selected_backend": "pi_cli", "model": "openrouter/z-ai/glm-5.2"},
+        {"title": "Factory presets — categorized, gain-conscious", "selected_backend": "pi_cli", "model": "openrouter/z-ai/glm-5.2"},
+        {"title": "Delta audition modes, processBlock wiring, CMakeLists", "selected_backend": "antigravity_cli"},
+        {"title": "State, A/B, preset, and profile tests", "selected_backend": "pi_cli", "model": "openrouter/z-ai/glm-5.2"}
+      ]
+    },
+    {
+      "phase_id": "l",
+      "goal": "Validation scripts, release documentation, and verification.\n\nValidation script: build Release, ctest, RT-safety checks, zero-latency verification, bypass click-free, state round-trip.\n\nRelease docs: verification checklist per spec section 22. Honest documentation of what is verified vs unverified (host testing that cannot run in CI is documented as requiring manual validation).\n\nPreset content refinement after build testing.",
+      "expected_changed_files": [
+        "scripts/validate.sh",
+        "docs/verification/shredeq_release.md",
+        "docs/verification/shredeq_phase_summary.md"
+      ],
+      "async_notes": "Wave 1: l.1 (validation script) and l.2 (preset content) independent. Wave 2: l.3 (release docs) depends on l.1.",
+      "risk_notes": "Low risk — no DSP changes.",
+      "estimated_task_count": 3,
+      "task_hints": [
+        {"title": "Validation script — build, test, RT-safety, latency checks", "selected_backend": "pi_cli", "model": "openrouter/z-ai/glm-5.2"},
+        {"title": "Factory preset content refinement", "selected_backend": "pi_cli", "model": "openrouter/google/gemma-4-31b-it"},
+        {"title": "Release documentation and verification checklist", "selected_backend": "pi_cli", "model": "openrouter/google/gemma-4-31b-it"}
+      ]
+    }
+  ]
+}

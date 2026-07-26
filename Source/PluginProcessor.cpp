@@ -299,11 +299,14 @@ ShredEQAudioProcessor::createParameterLayout()
 
 void ShredEQAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    juce::ignoreUnused (sampleRate, samplesPerBlock);
+    tightCut.prepare (sampleRate, samplesPerBlock);
+    chugStabilizer.prepare (sampleRate, samplesPerBlock);
 }
 
 void ShredEQAudioProcessor::releaseResources()
 {
+    tightCut.reset();
+    chugStabilizer.reset();
 }
 
 bool ShredEQAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -337,6 +340,90 @@ void ShredEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     for (int channel = totalInputChannels; channel < totalOutputChannels; ++channel)
         buffer.clear (channel, 0, buffer.getNumSamples());
+
+    // Helper lambdas to safely read parameters from APVTS
+    auto getFloatParam = [this] (const char* id) -> float
+    {
+        if (auto* param = apvts.getRawParameterValue (id))
+            return param->load();
+        return 0.0f;
+    };
+    auto getBoolParam = [this] (const char* id) -> bool
+    {
+        if (auto* param = apvts.getRawParameterValue (id))
+            return param->load() > 0.5f;
+        return false;
+    };
+
+    // Global bypass check
+    if (getBoolParam (ShredEQ::ParameterIDs::globalBypass))
+    {
+        tightCut.reset();
+        chugStabilizer.reset();
+        return;
+    }
+
+    // 1. Update TightCut parameters
+    tightCut.setEnabled (getBoolParam (ShredEQ::ParameterIDs::TightCut::enabled));
+    tightCut.setFrequency (getFloatParam (ShredEQ::ParameterIDs::TightCut::frequency));
+    
+    const auto tcSlopeChoice = static_cast<int> (std::round (getFloatParam (ShredEQ::ParameterIDs::TightCut::slope)));
+    int slopeDb = 24;
+    if (tcSlopeChoice == 0) slopeDb = 12;
+    else if (tcSlopeChoice == 1) slopeDb = 18;
+    else if (tcSlopeChoice == 2) slopeDb = 24;
+    else if (tcSlopeChoice == 3) slopeDb = 36;
+    tightCut.setSlope (slopeDb);
+
+    tightCut.setResonance (getFloatParam (ShredEQ::ParameterIDs::TightCut::resonance));
+    tightCut.setPunchRatio (getFloatParam (ShredEQ::ParameterIDs::TightCut::punchRatio));
+    tightCut.setPunchGainDb (getFloatParam (ShredEQ::ParameterIDs::TightCut::punchGain));
+    tightCut.setPunchQ (getFloatParam (ShredEQ::ParameterIDs::TightCut::punchQ));
+    
+    const auto tcPlacementChoice = static_cast<int> (std::round (getFloatParam (ShredEQ::ParameterIDs::TightCut::placement)));
+    tightCut.setPlacement (static_cast<ShredEQ::DSP::TightCut::Placement> (tcPlacementChoice));
+    
+    const auto tcRoutingChoice = static_cast<int> (std::round (getFloatParam (ShredEQ::ParameterIDs::TightCut::routing)));
+    tightCut.setRouting (static_cast<ShredEQ::DSP::TightCut::Routing> (tcRoutingChoice));
+    
+    tightCut.setListenRemoved (getBoolParam (ShredEQ::ParameterIDs::TightCut::listenRemoved));
+
+    // 2. Update ChugStabilizer parameters
+    chugStabilizer.setEnabled (getBoolParam (ShredEQ::ParameterIDs::Chug::enabled));
+    chugStabilizer.setTargetFrequency (getFloatParam (ShredEQ::ParameterIDs::Chug::frequency));
+    chugStabilizer.setBandwidthOctaves (getFloatParam (ShredEQ::ParameterIDs::Chug::bandwidth));
+    chugStabilizer.setMaximumReductionDb (getFloatParam (ShredEQ::ParameterIDs::Chug::maxReduction));
+    chugStabilizer.setThresholdDb (getFloatParam (ShredEQ::ParameterIDs::Chug::threshold));
+    chugStabilizer.setAutomaticThreshold (false);
+    chugStabilizer.setAttackMs (getFloatParam (ShredEQ::ParameterIDs::Chug::attack));
+    chugStabilizer.setHoldMs (getFloatParam (ShredEQ::ParameterIDs::Chug::hold));
+    chugStabilizer.setReleaseMs (getFloatParam (ShredEQ::ParameterIDs::Chug::release));
+    chugStabilizer.setPreservePick (getFloatParam (ShredEQ::ParameterIDs::Chug::preservePick) > 0.0f);
+    chugStabilizer.setTransientSensitivity (getFloatParam (ShredEQ::ParameterIDs::Chug::transientSens) / 100.0);
+    chugStabilizer.setDominanceSensitivity (getFloatParam (ShredEQ::ParameterIDs::Chug::dominanceSens) / 100.0);
+
+    // 3. Process DSP Chain
+    const auto placement = static_cast<ShredEQ::DSP::TightCut::Placement> (tcPlacementChoice);
+    auto* const* channels = buffer.getArrayOfWritePointers();
+    const auto numChannels = buffer.getNumChannels();
+    const auto numSamples = buffer.getNumSamples();
+
+    // Pre Stage A processing
+    if (placement == ShredEQ::DSP::TightCut::Placement::preStageA)
+    {
+        tightCut.process (channels, numChannels, numSamples);
+    }
+
+    // Chug Stabilizer processing
+    chugStabilizer.process (channels, numChannels, numSamples);
+
+    // Stage A / EQ processing would happen here
+
+    // Post Stage A processing
+    if (placement == ShredEQ::DSP::TightCut::Placement::postStageA)
+    {
+        tightCut.process (channels, numChannels, numSamples);
+    }
 }
 
 bool ShredEQAudioProcessor::hasEditor() const

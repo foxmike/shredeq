@@ -50,6 +50,8 @@ target_sources(ShredEQ
         Source/DSP/DynamicProcessor.cpp
         Source/DSP/ParametricBand.cpp
         Source/DSP/ResponseComputer.cpp
+        Source/DSP/TightCut.cpp
+        Source/DSP/ChugStabilizer.cpp
 )
 
 target_compile_definitions(ShredEQ PRIVATE
@@ -77,6 +79,8 @@ add_executable(ShredEQUnitTests
     tests/BiquadTests.cpp
     tests/ParametricBandTests.cpp
     tests/DynamicEQTests.cpp
+    tests/TightCutTests.cpp
+    tests/ChugStabilizerTests.cpp
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
     Source/DSP/BiquadCoefficients.cpp
@@ -85,6 +89,8 @@ add_executable(ShredEQUnitTests
     Source/DSP/DynamicProcessor.cpp
     Source/DSP/ParametricBand.cpp
     Source/DSP/ResponseComputer.cpp
+    Source/DSP/TightCut.cpp
+    Source/DSP/ChugStabilizer.cpp
 )
 
 target_compile_definitions(ShredEQUnitTests PRIVATE

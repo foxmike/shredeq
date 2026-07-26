@@ -1,6 +1,8 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include "DSP/TightCut.h"
+#include "DSP/ChugStabilizer.h"
 
 class ShredEQAudioProcessor : public juce::AudioProcessor
 {
@@ -40,5 +42,9 @@ private:
 
     juce::AudioProcessorValueTreeState apvts;
 
+    ShredEQ::DSP::TightCut tightCut;
+    ShredEQ::DSP::ChugStabilizer chugStabilizer;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ShredEQAudioProcessor)
 };
+

@@ -72,6 +72,8 @@ enable_testing()
 
 add_executable(ShredEQUnitTests
     tests/TestMain.cpp
+    tests/BiquadTests.cpp
+    tests/ParametricBandTests.cpp
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
     Source/DSP/BiquadCoefficients.cpp

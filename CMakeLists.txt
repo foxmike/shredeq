@@ -57,6 +57,10 @@ target_sources(ShredEQ
         Source/DSP/MultibandEngine.cpp
         Source/DSP/PitchDetector.cpp
         Source/DSP/NoteFollower.cpp
+        Source/Analysis/AnalysisFifo.cpp
+        Source/Analysis/SpectralAnalysisEngine.cpp
+        Source/DSP/ResonanceDetector.cpp
+        Source/DSP/ResonanceSuppressor.cpp
 )
 
 target_compile_definitions(ShredEQ PRIVATE
@@ -84,6 +88,11 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/MultibandTests.cpp")
     set(MULTIBAND_TEST_SRC tests/MultibandTests.cpp)
 endif()
 
+set(RESONANCE_TEST_SRC)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/ResonanceTests.cpp")
+    set(RESONANCE_TEST_SRC tests/ResonanceTests.cpp)
+endif()
+
 add_executable(ShredEQUnitTests
     tests/TestMain.cpp
     tests/BiquadTests.cpp
@@ -93,6 +102,7 @@ add_executable(ShredEQUnitTests
     tests/ChugStabilizerTests.cpp
     tests/DbgTests.cpp
     tests/PitchTrackingTests.cpp
+    ${RESONANCE_TEST_SRC}
     ${MULTIBAND_TEST_SRC}
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
@@ -109,6 +119,10 @@ add_executable(ShredEQUnitTests
     Source/DSP/MultibandEngine.cpp
     Source/DSP/PitchDetector.cpp
     Source/DSP/NoteFollower.cpp
+    Source/Analysis/AnalysisFifo.cpp
+    Source/Analysis/SpectralAnalysisEngine.cpp
+    Source/DSP/ResonanceDetector.cpp
+    Source/DSP/ResonanceSuppressor.cpp
 )
 
 target_compile_definitions(ShredEQUnitTests PRIVATE

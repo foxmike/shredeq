@@ -302,6 +302,14 @@ void ShredEQAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     tightCut.prepare (sampleRate, samplesPerBlock);
     chugStabilizer.prepare (sampleRate, samplesPerBlock);
     multibandEngine.prepare (sampleRate, samplesPerBlock);
+
+    spectralAnalysisEngine.prepare (sampleRate, samplesPerBlock, 2048, 512);
+    resonanceDetector.prepare (sampleRate, 2048);
+    resonanceSuppressor.prepare (sampleRate);
+    pitchDetector.prepare (sampleRate, samplesPerBlock);
+
+    analysisSnapshot.prepare (spectralAnalysisEngine.getNumBins());
+    controlSampleCounter = 0;
 }
 
 void ShredEQAudioProcessor::releaseResources()
@@ -309,6 +317,24 @@ void ShredEQAudioProcessor::releaseResources()
     tightCut.reset();
     chugStabilizer.reset();
     multibandEngine.reset();
+
+    spectralAnalysisEngine.setEnabled (false);
+    resonanceDetector.setEnabled (false);
+    resonanceSuppressor.reset();
+    pitchDetector.reset();
+}
+
+void ShredEQAudioProcessor::reset()
+{
+    tightCut.reset();
+    chugStabilizer.reset();
+    multibandEngine.reset();
+
+    spectralAnalysisEngine.reset();
+    resonanceDetector.reset();
+    resonanceSuppressor.reset();
+    pitchDetector.reset();
+    controlSampleCounter = 0;
 }
 
 bool ShredEQAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -357,13 +383,55 @@ void ShredEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         return false;
     };
 
+    const auto numSamples = buffer.getNumSamples();
+    auto* const* channels = buffer.getArrayOfWritePointers();
+    const auto numChannels = buffer.getNumChannels();
+
     // Global bypass check
     if (getBoolParam (ShredEQ::ParameterIDs::globalBypass))
     {
         tightCut.reset();
         chugStabilizer.reset();
         multibandEngine.reset();
+        resonanceSuppressor.reset();
         return;
+    }
+
+    // Push input audio to engine and pitch detector
+    if (getBoolParam (ShredEQ::ParameterIDs::analyzerEnable))
+    {
+        spectralAnalysisEngine.setEnabled (true);
+        (void) spectralAnalysisEngine.pushAudio (channels, numChannels, numSamples);
+    }
+    else
+    {
+        spectralAnalysisEngine.setEnabled (false);
+    }
+
+    if (numChannels > 0)
+    {
+        (void) pitchDetector.pushBlock (channels[0], numSamples);
+    }
+
+    // Control rate updates
+    controlSampleCounter += numSamples;
+    if (controlSampleCounter >= 256)
+    {
+        controlSampleCounter = 0;
+        (void) pitchDetector.processControlRate();
+
+        if (spectralAnalysisEngine.isEnabled())
+        {
+            if (spectralAnalysisEngine.readLatestSnapshot (analysisSnapshot))
+            {
+                (void) resonanceDetector.processControlRate (analysisSnapshot, pitchDetector.getLatestResult());
+            }
+        }
+    }
+
+    if (resonanceSuppressor.isScanning())
+    {
+        resonanceSuppressor.updateScan (numSamples, resonanceDetector);
     }
 
     // 1. Update TightCut parameters
@@ -434,6 +502,31 @@ void ShredEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         multibandEngine.setZoneUpward (index, modeChoice == 1);
     }
 
+    // Update ResonanceSuppressor parameters
+    for (int i = 0; i < 6; ++i)
+    {
+        const auto& slotIDs = ShredEQ::ParameterIDs::resonanceSlots[static_cast<std::size_t> (i)];
+        auto& slot = resonanceSuppressor.getSlot (i);
+
+        slot.setEnabled (getBoolParam (slotIDs.enabled));
+        slot.setFrequency (getFloatParam (slotIDs.frequency));
+        slot.setQ (getFloatParam (slotIDs.q));
+        slot.setMaxDepthDb (getFloatParam (slotIDs.maxDepth));
+        slot.setAttackMs (getFloatParam (slotIDs.attack));
+        slot.setReleaseMs (getFloatParam (slotIDs.release));
+        slot.setPersistenceRequirement (getFloatParam (slotIDs.persistence));
+
+        const auto modeChoice = static_cast<int> (std::round (getFloatParam (slotIDs.mode)));
+        slot.setIsStatic (modeChoice == 0);
+
+        const auto placementChoice = static_cast<int> (std::round (getFloatParam (slotIDs.placement)));
+        slot.setPlacement (static_cast<ShredEQ::DSP::StereoRoutingMode> (placementChoice));
+
+        slot.setFreeze (getBoolParam (slotIDs.freeze));
+
+        slot.updateDepthTarget (resonanceDetector);
+    }
+
     // 4. Extract sidechain buffer if the bus is active
     const juce::AudioBuffer<float>* sidechainBufferPtr = nullptr;
     juce::AudioBuffer<float> sidechainBuffer;
@@ -448,9 +541,6 @@ void ShredEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     // 5. Process DSP Chain
     const auto placement = static_cast<ShredEQ::DSP::TightCut::Placement> (tcPlacementChoice);
-    auto* const* channels = buffer.getArrayOfWritePointers();
-    const auto numChannels = buffer.getNumChannels();
-    const auto numSamples = buffer.getNumSamples();
 
     // Pre Stage A processing
     if (placement == ShredEQ::DSP::TightCut::Placement::preStageA)
@@ -465,6 +555,11 @@ void ShredEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     // Multiband Engine processing
     multibandEngine.process (buffer, sidechainBufferPtr);
+
+    // Resonance Suppressor processing
+    // Documenting insertion point choice: Chosen to run as a late correction stage after
+    // the main Tone EQ / Multiband processing to correct room or cabinet resonances.
+    resonanceSuppressor.process (buffer);
 
     // Post Stage A processing
     if (placement == ShredEQ::DSP::TightCut::Placement::postStageA)
@@ -564,6 +659,26 @@ void ShredEQAudioProcessor::setStateInformation (const void* data, int sizeInByt
 
         apvts.replaceState (state);
     }
+}
+
+void ShredEQAudioProcessor::startResonanceScan (double durationSeconds) noexcept
+{
+    resonanceSuppressor.startScan (durationSeconds, getSampleRate(), resonanceDetector);
+}
+
+void ShredEQAudioProcessor::stopResonanceScan() noexcept
+{
+    resonanceSuppressor.endScan (resonanceDetector);
+}
+
+bool ShredEQAudioProcessor::isResonanceScanning() const noexcept
+{
+    return resonanceSuppressor.isScanning();
+}
+
+double ShredEQAudioProcessor::getResonanceScanProgress() const noexcept
+{
+    return resonanceSuppressor.getScanProgress();
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

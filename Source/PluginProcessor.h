@@ -4,6 +4,10 @@
 #include "DSP/TightCut.h"
 #include "DSP/ChugStabilizer.h"
 #include "DSP/MultibandEngine.h"
+#include "Analysis/SpectralAnalysisEngine.h"
+#include "DSP/ResonanceDetector.h"
+#include "DSP/ResonanceSuppressor.h"
+#include "DSP/PitchDetector.h"
 
 class ShredEQAudioProcessor : public juce::AudioProcessor
 {
@@ -13,6 +17,7 @@ public:
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
+    void reset() override;
     bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
     void processBlock (juce::AudioBuffer<float>& buffer,
                        juce::MidiBuffer& midiMessages) override;
@@ -38,6 +43,15 @@ public:
     juce::AudioProcessorValueTreeState& getAPVTS() noexcept { return apvts; }
     const juce::AudioProcessorValueTreeState& getAPVTS() const noexcept { return apvts; }
 
+    // Scan Workflow APIs
+    void startResonanceScan (double durationSeconds) noexcept;
+    void stopResonanceScan() noexcept;
+    bool isResonanceScanning() const noexcept;
+    double getResonanceScanProgress() const noexcept;
+    
+    ShredEQ::DSP::ResonanceSuppressor& getResonanceSuppressor() noexcept { return resonanceSuppressor; }
+    const ShredEQ::DSP::ResonanceSuppressor& getResonanceSuppressor() const noexcept { return resonanceSuppressor; }
+
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
@@ -46,6 +60,15 @@ private:
     ShredEQ::DSP::TightCut tightCut;
     ShredEQ::DSP::ChugStabilizer chugStabilizer;
     ShredEQ::DSP::MultibandEngine multibandEngine;
+
+    // Phase G additions
+    ShredEQ::Analysis::SpectralAnalysisEngine spectralAnalysisEngine;
+    ShredEQ::DSP::ResonanceDetector resonanceDetector;
+    ShredEQ::DSP::ResonanceSuppressor resonanceSuppressor;
+    ShredEQ::DSP::PitchDetector pitchDetector;
+
+    ShredEQ::Analysis::SpectralAnalysisEngine::Snapshot analysisSnapshot;
+    int controlSampleCounter = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ShredEQAudioProcessor)
 };

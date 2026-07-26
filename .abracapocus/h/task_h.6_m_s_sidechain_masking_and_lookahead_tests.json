@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "task_id": "h.6",
+  "phase": "H",
+  "phase_id": "h",
+  "title": "M/S, sidechain masking, and lookahead tests",
+  "description": "Add juce::UnitTest coverage for MidSideRouter, SidechainAnalyzer/MaskingCarver, and LookaheadDelay per SHREDEQ_SPEC.md \u00a710, \u00a711, \u00a719.2, and \u00a721.6.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- Source/DSP/MidSideRouter.* public encode/decode and side HPF APIs from h.1\n- Source/DSP/SidechainAnalyzer.* and MaskingCarver.* metric/carve/suggestion APIs from h.2\n- Source/DSP/LookaheadDelay.* mode/latency APIs from h.3\n- Source/DSP/MonoGuard.* if needed for optional coherence assertions (read only)\n- tests/TestMain.cpp and existing tests/*Tests.cpp patterns (phases B\u2013G)\n- CMakeLists.txt as left by h.5 (MidSideTests.cpp and LookaheadTests.cpp should already be listed \u2014 do not edit CMake unless an entry is missing)\n- .abracapocus/SHREDEQ_SPEC.md \u00a710.2, \u00a711.1\u201311.2, \u00a719.2\n\nImplement tests/MidSideTests.cpp:\n1. Encode then decode round-trip on a stereo fixture restores L/R within tight float tolerance (energy-preserving inverse).\n2. Mid signal of identical L=R tone concentrates energy in Mid and near-zero Side; decode returns original.\n3. Side high-pass in 120\u2013300 Hz range attenuates low-frequency side content vs bypassed HPF (relative band energy assert).\n4. Disabled router leaves buffer unchanged within tolerance.\n5. Optional light SidechainAnalyzer tests in this file OR with MidSide if natural: with synthetic main+sidechain powered in the same band, Masking > 0 and G_carve \u2264 0 and |G_carve| \u2264 G_max; with silent sidechain, Masking \u2248 0; suggestion mode does not change process output until band enable/accept.\n6. MaskingCarver disabled = true bypass; enabled band carves reduce main energy in the collision band vs bypass under strong masking fixture.\n\nImplement tests/LookaheadTests.cpp:\n1. Off mode: getLatencySamples()==0; process is pass-through within tolerance.\n2. Each of 0.5/1/2/5 ms modes at a fixed sample rate (e.g. 48 kHz): getLatencySamples() equals round(ms*sr/1000) (or documented exact mapping); impulse emerges at the expected delay index \u00b11 sample.\n3. Mode change does not produce NaNs/Inf; optional energy during crossfade remains finite; after settle, delay matches new mode.\n4. reset() clears residual so a subsequent impulse is not polluted by pre-reset content.\n\nUse juce::UnitTest; no new third-party frameworks. Do not rewrite production DSP solely to force green tests \u2014 only assert documented tolerances.\n\nverification_commands left empty \u2014 C++ adapter infers cmake/ctest.",
+  "acceptance_criteria": [
+    "tests/MidSideTests.cpp and tests/LookaheadTests.cpp exist and register juce::UnitTest coverage",
+    "MidSide encode/decode round-trip and side HPF / bypass behaviors are asserted with documented float tolerances",
+    "Sidechain masking fixture yields Masking>0 and bounded non-positive G_carve; silent sidechain yields ~0 masking; carver bypass vs enabled energy relationship is asserted",
+    "LookaheadTests assert Off\u21d20 latency pass-through and 0.5/1/2/5 ms modes report exact getLatencySamples with impulse delay within \u00b11 sample",
+    "No production DSP algorithm rewrites solely to force green tests",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "pi_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "tests/MidSideTests.cpp",
+    "tests/LookaheadTests.cpp"
+  ],
+  "forbidden_changes": [
+    "modify Source/DSP/MidSideRouter.*",
+    "modify Source/DSP/SidechainAnalyzer.*",
+    "modify Source/DSP/MaskingCarver.*",
+    "modify Source/DSP/MonoGuard.*",
+    "modify Source/DSP/LookaheadDelay.*",
+    "modify Source/PluginProcessor.*",
+    "modify CMakeLists.txt except emergency single-line append of missing MidSideTests.cpp or LookaheadTests.cpp",
+    "modify CMakePresets.json",
+    "modify Source/PluginEditor.*",
+    "add Catch2/GoogleTest/third-party test frameworks",
+    "change production DSP algorithms solely to force green tests"
+  ],
+  "allowed_symbols": [
+    "MidSideTests",
+    "LookaheadTests",
+    "runTest",
+    "MidSideRouter",
+    "SidechainAnalyzer",
+    "MaskingCarver",
+    "LookaheadDelay",
+    "LookaheadMode",
+    "MonoGuard",
+    "getLatencySamples",
+    "processEncode",
+    "processDecode"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "juce::UnitTest subclasses in tests/MidSideTests.cpp and tests/LookaheadTests.cpp",
+      "synthetic stereo impulses, sines, and band-limited sidechain fixtures",
+      "relative energy and \u00b11 sample delay tolerances",
+      "emergency CMake one-line append only if a test source is missing from target"
+    ],
+    "forbidden": [
+      "processor/editor host integration tests",
+      "broad CMake refactors",
+      "pluginval or DAW host runs inside this unit test",
+      "exact sample-identical FFT bit patterns across platforms"
+    ]
+  },
+  "dependencies": [
+    "h.1",
+    "h.2",
+    "h.3"
+  ],
+  "verification_commands": [],
+  "task_timeout_seconds": 900,
+  "model": "openrouter/z-ai/glm-5.2"
+}

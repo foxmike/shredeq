@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "task_id": "d.4",
+  "phase": "D",
+  "phase_id": "d",
+  "title": "TightCut and ChugStabilizer tests",
+  "description": "Add juce::UnitTest coverage for TightCut and ChugStabilizer per SHREDEQ_SPEC.md \u00a76, \u00a77, and \u00a721.5.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- Source/DSP/TightCut.* and Source/DSP/ChugStabilizer.* public APIs\n- tests/TestMain.cpp and existing tests/*Tests.cpp patterns (phase B/C)\n- CMakeLists.txt as left by d.3 (both test files should already be listed \u2014 do not edit CMake unless a file is missing, then append only the missing test path)\n- .abracapocus/SHREDEQ_SPEC.md \u00a76\u20137 controls and \u00a721.5 chug fixtures intent\n\nImplement tests/TightCutTests.cpp:\n1. prepare/process with HPF enabled: low sine well below cutoff is attenuated relative to mid/high sine above cutoff.\n2. Higher slope yields more attenuation below cutoff than lower slope at the same cutoff (spot-check 12 vs 24 or 36).\n3. Punch bell linked mode: effective punch frequency tracks r*f_c when cutoff changes; unlinked keeps independent punch freq.\n4. Listen-to-removed mode produces more low-band energy in the output than the normal filtered path for a low-frequency probe (or dry\u2212filtered relationship holds).\n5. reset() clears filter memory (no NaNs; finite output after impulse).\n\nImplement tests/ChugStabilizerTests.cpp:\n1. Synthetic palm-mute-like low burst (strong low-band transient) produces measurable gain reduction / non-unity GR within maxReduction.\n2. Steady open-chord-like broadband or mid-dominant tone is not permanently thinned (GR near 0 after settle or far below burst case).\n3. Preserve Pick on reduces GR for pick-like broadband transient with normal low-band dominance versus Preserve Pick off.\n4. Attack/hold/release influence timing: faster attack reaches GR sooner on a step burst; release recovers toward 0 after burst ends.\n5. Disabled module \u2248 bypass (output matches input within tolerance on a probe buffer).\n6. Visualization getters report reduction and a defined trigger source when an event fires (if API exposed).\n\nUse juce::UnitTest only; no Catch2/GoogleTest. Prefer public APIs; do not rewrite production DSP to force greens. Tolerance-based float compares with clear expect messages.\n\nCMakeLists.txt is owned by d.3 \u2014 avoid editing unless a test source entry is missing.",
+  "acceptance_criteria": [
+    "tests/TightCutTests.cpp exists and registers juce::UnitTest coverage for TightCut HPF attenuation, slope, punch linkage, and listen-removed behavior",
+    "tests/ChugStabilizerTests.cpp exists and registers juce::UnitTest coverage for burst GR, non-thinning steady tones, Preserve Pick, and bypass-when-disabled",
+    "Tests use finite synthetic buffers and assert GR or magnitude relationships with explicit tolerances",
+    "No production DSP algorithm rewrites solely to force green tests",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "pi_cli",
+  "model": "openrouter/z-ai/glm-5.2",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "tests/TightCutTests.cpp",
+    "tests/ChugStabilizerTests.cpp"
+  ],
+  "forbidden_changes": [
+    "modify Source/DSP/TightCut.*",
+    "modify Source/DSP/ChugStabilizer.*",
+    "modify Source/PluginProcessor.*",
+    "modify CMakeLists.txt except emergency single-line append of a missing test cpp",
+    "modify CMakePresets.json",
+    "modify Source/PluginEditor.*",
+    "add Catch2/GoogleTest/third-party test frameworks",
+    "change production DSP algorithms solely to force green tests"
+  ],
+  "allowed_symbols": [
+    "TightCutTests",
+    "ChugStabilizerTests",
+    "runTest",
+    "TightCut",
+    "ChugStabilizer"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "juce::UnitTest subclasses in the two test files",
+      "synthetic sines, bursts, and steady tones",
+      "tolerance-based magnitude and GR comparisons",
+      "emergency CMake one-line append only if test source missing"
+    ],
+    "forbidden": [
+      "processor/editor wiring",
+      "broad CMake refactors",
+      "host integration tests"
+    ]
+  },
+  "dependencies": [
+    "d.1",
+    "d.2"
+  ],
+  "task_timeout_seconds": 900,
+  "verification_commands": []
+}

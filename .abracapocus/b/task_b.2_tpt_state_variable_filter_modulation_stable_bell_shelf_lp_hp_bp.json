@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "task_id": "b.2",
+  "phase": "B",
+  "phase_id": "b",
+  "title": "TPT state-variable filter \u2014 modulation-stable bell, shelf, LP, HP, BP",
+  "description": "Implement a topology-preserving transform (TPT) state-variable filter for modulation-stable coefficient/parameter sweeps used by dynamic or continuously modulated parametric bands.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a73.5 (static biquads vs TPT for modulated bands)\n- /home/mike/dev/mike/music/plugins/shredboost/Source/DSP/ToneFilter.h and MidVoicingFilter.h for juce::SmoothedValue usage patterns\n- Source/DSP/BiquadCoefficients.h if present (type naming consistency only; do not edit)\n\nImplement Source/DSP/TPTFilter.h and Source/DSP/TPTFilter.cpp:\n1. TPT SVF supporting at least: bell/peak, low shelf, high shelf, low-pass, high-pass, band-pass.\n2. prepare(sampleRate) / reset() / setParameters(freq, gainDb, Q, type) with stable tick/processSample (and stereo or dual-mono helper if natural). No heap allocation in process methods.\n3. Parameter changes must be modulation-safe (no zipper from unleaked state dumps; recompute g/R/coefficients from instantaneous target each sample or block as designed; optional internal smoother hooks are fine but primary stability is TPT structure).\n4. Clear state variables, denormal protection strategy consistent with sibling plugins if trivial, and channel independence (process L/R without shared state unless documented mono mode).\n5. Do not perform M/S encoding inside TPTFilter.\n\nDo NOT implement ParametricBand glue, ResponseComputer, BiquadCoefficients, tests, or CMakeLists.txt.",
+  "acceptance_criteria": [
+    "Source/DSP/TPTFilter.h and Source/DSP/TPTFilter.cpp exist",
+    "TPTFilter supports bell, low shelf, high shelf, LP, HP, and BP modes",
+    "TPTFilter exposes prepare/reset and per-sample or block process with no heap allocation in process methods",
+    "Header or implementation comments state purpose: modulation-stable sweeps vs static biquad path",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "codex_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/DSP/TPTFilter.h",
+    "Source/DSP/TPTFilter.cpp"
+  ],
+  "forbidden_changes": [
+    "modify CMakeLists.txt or CMakePresets.json",
+    "modify Source/DSP/BiquadCoefficients.*",
+    "modify Source/DSP/ParametricBand.*",
+    "modify Source/DSP/ResponseComputer.*",
+    "modify tests/**",
+    "modify Source/PluginProcessor.* or Source/PluginEditor.*",
+    "perform M/S encode/decode inside TPTFilter",
+    "add third-party dependencies"
+  ],
+  "allowed_symbols": [
+    "TPTFilter",
+    "TPTFilterType",
+    "prepare",
+    "reset",
+    "setParameters",
+    "processSample",
+    "processBlock"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "classic TPT/SVF tick (Zavalishin-style) with mode mix of bp/lp/hp/shelf/bell",
+      "per-channel state pair for stereo process helpers",
+      "optional juce::SmoothedValue for host-rate parameter smoothing"
+    ],
+    "forbidden": [
+      "static RBJ biquad cascade ownership (belongs in BiquadCoefficients/ParametricBand)",
+      "stage-level M/S matrix",
+      "wire into PluginProcessor"
+    ]
+  },
+  "dependencies": [],
+  "task_timeout_seconds": 900,
+  "verification_commands": []
+}

@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "task_id": "k.1",
+  "phase": "K",
+  "phase_id": "k",
+  "title": "A/B state engine, gain-matched bypass measurement",
+  "description": "Extend StateManager with full A/B comparison engine and gain-matched bypass measurement per SHREDEQ_SPEC.md \u00a714.1\u201314.2. Click-safe crossfade and rolling RMS level match.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a714.1 (two complete internal states; instant switch with click-safe crossfade; copy A\u2192B; reset either)\n- .abracapocus/SHREDEQ_SPEC.md \u00a714.2 (gain-matched bypass: Delta_L = L_out - L_in; G_match = -Delta_L; filtered RMS/short-term perceptual level; slow-moving bounded trim; frozen during comparison switching; not written to permanent output gain unless requested)\n- .abracapocus/SHREDEQ_SPEC.md \u00a717 / \u00a721.8 (state save includes A/B; restore after reopen)\n- Source/StateManager.h/.cpp A/B capture/apply/swap and schema_version from phase A\n- Source/ParameterIDs.h abState, globalBypass, inputGain, outputGain (read only \u2014 do not edit)\n- Source/PluginProcessor.h getAPVTS() usage patterns (read only \u2014 processor wiring is k.4)\n\nImplement / extend Source/StateManager.h and Source/StateManager.cpp:\n1. A/B engine:\n   - Two complete slots (A and B) holding full automatable parameter snapshots (ValueTree or equivalent) plus any non-APVTS comparison metadata already owned by StateManager.\n   - captureSlot / applySlot for active APVTS; switchActiveSlot(A|B) that marks the target slot active.\n   - copyAtoB / copyBtoA / resetSlot(A|B) without allocating on the audio thread (message-thread APIs; document RT-unsafe where IO or ValueTree copy occurs).\n   - Optional: beginCrossfade / getCrossfadeGainA/B helpers exposing a linear or equal-power ramp duration in the 5\u201330 ms range for processor consumption \u2014 computation only; actual sample mixing is k.4.\n   - Persist both slots and active-slot index in XML state with schema_version; load restores both slots and active index.\n2. Gain-matched bypass measurement (GainMatchMeter or methods on StateManager):\n   - prepare(sampleRate), reset(), process measurement from dry input and wet output peak/RMS streams using fixed-capacity rolling window (no heap after prepare).\n   - Maintain filtered RMS (or short-term level) of L_in and L_out; compute Delta_L_dB = L_out_dB - L_in_dB; G_match_dB = -Delta_L_dB.\n   - Slow-attack/release smoothing on G_match; hard clamp (e.g. \u00b124 dB); freezeGMatch(bool) freezes trim during A/B comparison switching; G_match must not mutate stored outputGain / permanent preset state unless an explicit commitMatchTrim() is invoked.\n   - Expose read-only getMatchGainDb(), isFrozen(), isEnabled() for UI/processor.\n3. Public API surface kept header-documented so k.4 can call switch + apply crossfade + pushProcessLevels without reimplementing logic.\n\nDo not modify PluginProcessor, PluginEditor, Profiles, CMakeLists, presets, or tests. verification_commands left empty \u2014 C++ adapter infers cmake/ctest.",
+  "acceptance_criteria": [
+    "Source/StateManager.h and Source/StateManager.cpp provide dual A/B slots with capture, apply, switch, copy A\u2192B / B\u2192A, and reset-slot APIs",
+    "StateManager XML/state serialization includes both A/B slots, active slot, and schema_version",
+    "Gain-match measurement API compute slow-moving bounded G_match_dB = -(L_out - L_in) from rolling filtered RMS and supports freeze during comparison switching",
+    "G_match is not written into permanent outputGain/preset state without an explicit commit API",
+    "Crossfade helper duration is in the click-safe 5\u201330 ms range or clearly documented for processor sample mixing",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "codex_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/StateManager.h",
+    "Source/StateManager.cpp"
+  ],
+  "forbidden_changes": [
+    "modify Source/PluginProcessor.*",
+    "modify Source/PluginEditor.*",
+    "modify Source/Profiles.*",
+    "modify CMakeLists.txt or CMakePresets.json",
+    "modify Resources/Presets/**",
+    "modify tests/**",
+    "modify Source/ParameterIDs.h",
+    "add third-party dependencies"
+  ],
+  "allowed_symbols": [
+    "StateManager",
+    "GainMatchMeter",
+    "switchActiveSlot",
+    "copyAtoB",
+    "copyBtoA",
+    "resetSlot",
+    "captureSlot",
+    "applySlot",
+    "getMatchGainDb",
+    "freezeGMatch",
+    "commitMatchTrim",
+    "beginCrossfade",
+    "processMatchLevels"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "extend existing StateManager A/B slots rather than a parallel state class",
+      "ValueTree or MemoryBlock snapshots for A/B",
+      "fixed-capacity rolling RMS / ballistics inside StateManager or nested GainMatchMeter",
+      "message-thread A/B apply with crossfade coeff helpers for RT mix in processor"
+    ],
+    "forbidden": [
+      "rewrite APVTS parameter inventory",
+      "implement Profiles or factory preset JSON",
+      "own processBlock audio graph wiring",
+      "write permanent auto-gain into presets without explicit commit"
+    ]
+  },
+  "dependencies": [],
+  "verification_commands": [],
+  "task_timeout_seconds": 900
+}

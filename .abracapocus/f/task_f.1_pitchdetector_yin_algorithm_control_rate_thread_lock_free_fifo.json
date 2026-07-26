@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "task_id": "f.1",
+  "phase": "F",
+  "phase_id": "f",
+  "title": "PitchDetector \u2014 YIN algorithm, control-rate thread, lock-free FIFO",
+  "description": "Implement monophonic audio pitch detection (YIN) with control-rate background analysis and lock-free audio\u2192analysis handoff per SHREDEQ_SPEC.md \u00a79.2 and \u00a718.4.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a79.2 (Audio Monophonic YIN math: d_t, d'_t, f0 = fs/tau_0)\n- .abracapocus/SHREDEQ_SPEC.md \u00a718.4 (pitch-analysis thread: lower control rate, lock-free FIFO, returns frequency/confidence/timestamp/tracking state; audio thread interpolates)\n- .abracapocus/SHREDEQ_SPEC.md \u00a718.6 (NaN/inf/frequency bounds guards)\n- .abracapocus/SHREDEQ_SPEC.md \u00a721.7 (pitch tracking test intent \u2014 do not write tests here)\n- Sibling DSP modules under Source/DSP/* for prepare/reset/process style and lock-free or atomic patterns if present (read only)\n- CMakeLists.txt patterns (read only; f.2 owns CMake registration)\n\nImplement Source/DSP/PitchDetector.h and Source/DSP/PitchDetector.cpp:\n1. PitchDetector class with prepare(sampleRate, maxBlockSize), reset(), and an audio-thread push API that accepts conditioned mono frames (or short blocks) into a fixed-capacity lock-free FIFO \u2014 no heap allocation on the audio path.\n2. Conditioning/downsampling for YIN: high-pass or mild prefilter as needed, and operate YIN on a downsampled control-rate buffer (document downsample factor). Clipping/saturation of intermediate buffers is allowed; keep memory bounds fixed at prepare.\n3. YIN difference function and cumulative-mean normalized difference exactly after \u00a79.2:\n   d_t(tau) = sum_j (x_j - x_{j+tau})^2\n   d'_t(0) = 1; d'_t(tau) = d_t(tau) / ((1/tau) * sum_{j=1..tau} d_t(j)) for tau > 0\n   Estimate tau_0 at the first local minimum of d' below a configurable absolute threshold (with parabolic refinement optional but preferred); f0 = fs_effective / tau_0.\n4. Background/control-rate analysis: either a juce::TimeSliceThread / Thread subclass owned by PitchDetector or an explicit processControlRate() meant to run off the audio thread. Document the chosen pattern so later analyzer threads can match it. Audio thread must never run full YIN on large windows in processBlock-critical code.\n5. Published result snapshot (atomics or lock-free SPSC hop): estimated frequency Hz, confidence in [0,1] (derive from d' depth / clarity), timestamp (sample time or steady clock), and tracking state enum (e.g. Locked, Tracking, Searching, Hold, Silent/LowConfidence).\n6. MIDI helper API on the same type or a small nested helper (still in these files only): convert MIDI note number to f0 = 440 * 2^((m-69)/12); track held notes and expose priority selection Lowest / Highest / Last (priority mode values from \u00a79.2). MIDI path is deterministic and does not require the YIN thread.\n7. Configurable usable range (min/max Hz appropriate for guitar/bass, e.g. ~30\u20131500 Hz default band) and guards against tau/fs invalid, empty FIFO, silence, and chords (do not claim polyphonic pitch \u2014 low confidence on inconclusive windows).\n8. No PluginProcessor wiring, no NoteFollower, no ParametricBand edits, no tests, no CMakeLists changes in this task.\n\nC++20/JUCE style consistent with the rest of Source/DSP. verification_commands left empty \u2014 C++ adapter infers cmake/ctest.",
+  "acceptance_criteria": [
+    "Source/DSP/PitchDetector.h and Source/DSP/PitchDetector.cpp exist",
+    "PitchDetector implements YIN cumulative-mean normalized difference and f0 = fs_effective/tau_0 on a conditioned downsampled signal per SHREDEQ_SPEC.md \u00a79.2",
+    "Audio thread supplies frames via fixed-capacity lock-free FIFO; full YIN analysis runs at lower control rate off the audio thread (or via explicit control-rate API documented for background use)",
+    "Published snapshot includes estimated frequency, confidence, timestamp, and tracking state per \u00a718.4",
+    "MIDI note helper computes f0 = 440*2^((m-69)/12) with lowest/highest/last held-note priority selection",
+    "No heap allocation on the audio-thread push/path; numerical guards for silence, invalid tau, and out-of-range f0",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "codex_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/DSP/PitchDetector.h",
+    "Source/DSP/PitchDetector.cpp"
+  ],
+  "forbidden_changes": [
+    "modify CMakeLists.txt or CMakePresets.json",
+    "modify Source/DSP/NoteFollower.*",
+    "modify Source/DSP/ParametricBand.*",
+    "modify Source/PluginProcessor.* or Source/PluginEditor.*",
+    "modify Source/ParameterIDs.h",
+    "modify tests/**",
+    "add third-party pitch libraries (e.g. aubio, dywapitchtrack) as new dependencies",
+    "implement NoteFollower harmonic targeting or band frequency ownership",
+    "wire processBlock or start global analyzer threads from PluginProcessor"
+  ],
+  "allowed_symbols": [
+    "PitchDetector",
+    "prepare",
+    "reset",
+    "pushAudio",
+    "processControlRate",
+    "getEstimate",
+    "getFrequencyHz",
+    "getConfidence",
+    "getTrackingState",
+    "TrackingState",
+    "setAbsoluteThreshold",
+    "setFrequencyRange",
+    "MidiNoteTracker",
+    "noteToFrequencyHz",
+    "setMidiPriority",
+    "MidiPriority"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "implement classic YIN with optional parabolic tau refinement",
+      "fixed downsample factor chosen at prepare",
+      "juce::AbstractFifo or equivalent SPSC ring for audio frames",
+      "juce::Thread or TimeSliceClient owned internally, or caller-driven processControlRate API with same contract",
+      "simple held-note set for MIDI priority modes"
+    ],
+    "forbidden": [
+      "chord/polyphonic multi-F0 estimator",
+      "own CMakeLists.txt target_sources",
+      "ParametricBand or NoteFollower integration",
+      "GPU/FFT pitch methods as the primary detector",
+      "third-party pitch detection dependency"
+    ]
+  },
+  "dependencies": [],
+  "verification_commands": [],
+  "task_timeout_seconds": 900
+}

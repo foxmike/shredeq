@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "task_id": "c.2",
+  "phase": "C",
+  "phase_id": "c",
+  "title": "DynamicProcessor \u2014 all modes, detector sources, gain modulation",
+  "description": "Implement the per-band dynamic processor that wraps envelope followers, soft-knee gain, detector source selection, and applies dynamic gain modulation to a band\u2019s static EQ amount.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- Source/DSP/EnvelopeFollower.h/.cpp (c.1 outputs)\n- .abracapocus/SHREDEQ_SPEC.md \u00a74.1\u20134.5 (detector sources, modes, visualization data fields)\n- Source/DSP/ParametricBand.h if present (integration surface only; do not edit)\n- .abracapocus/SHREDEQ_SPEC.md \u00a721.3 dynamic EQ verify list\n\nImplement Source/DSP/DynamicProcessor.h and Source/DSP/DynamicProcessor.cpp:\n1. Enums: DynamicMode { staticEq, downwardDynamic, upwardDynamic, compression, expansion, transientOnly, sustainOnly, sidechained } and DetectorSource { fullBandInternal, bandLimitedInternal, left, right, mid, side, externalSidechain, inputMinusOutput, transientComponent, sustainComponent } matching \u00a74.1\u20134.5 wording.\n2. DynamicProcessor owns/composes EnvelopeFollower (+ optional TransientSustainSeparator), soft-knee parameters (threshold T, ratio R, knee K, range cap D_max), attack/release, and an optional simple detector bandpass (or coefficient hooks) isolating the region around the EQ band frequency/Q for band-limited internal detection.\n3. prepare/reset; process path that, given primary detector sample (and optional external SC / L/R/mid/side taps via a small DetectorContext struct), computes detector level, applies mode-specific gain target, smooths gain, and returns linear gain multiplier (and dB GR) to scale the band\u2019s static boost/cut \u2014 staticEq mode returns unity modulation.\n4. Mode behavior (document in headers):\n   - downward/upward/compression/expansion map signs and ratio application via soft-knee helper;\n   - transientOnly/sustainOnly feed detector from transient or sustain component;\n   - sidechained uses external sidechain tap when provided, else safe fallback to internal;\n   - expansion distinct from simple upward by ratio application above/below threshold as documented in code comments aligned with common dynamic-EQ practice and \u00a74.3 range caps.\n5. DynamicVisualizationData POD struct (or nested) for GUI: staticGainDb, maxDynamicRangeDb, currentGainDb, gainReductionHistory sample or ring write API stub, thresholdDb, detectorLevelDb, reactionFlags (transient/sustain/sidechain). Update fields each block or sample as designed; no GUI drawing here.\n6. No heap in audio process. Do not edit ParametricBand or CMakeLists.\n\nDo NOT rewrite EnvelopeFollower core math beyond using its public API; extend EnvelopeFollower only if a missing kg setter blocks composition \u2014 prefer keeping c.1 API and composing here.",
+  "acceptance_criteria": [
+    "Source/DSP/DynamicProcessor.h and Source/DSP/DynamicProcessor.cpp exist",
+    "DynamicProcessor exposes DynamicMode covering static, downward/upward dynamic, compression, expansion, transient-only, sustain-only, and sidechained",
+    "DetectorSource enum covers full-band internal, band-limited internal, left, right, mid, side, external sidechain, input-minus-output, transient, and sustain components",
+    "Processor composes EnvelopeFollower/soft-knee gain and returns smoothed linear gain modulation with no heap allocation in process",
+    "DynamicVisualizationData (or equivalent) exposes threshold, detector level, current/dynamic gain, and transient/sustain/sidechain reaction state",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "antigravity_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/DSP/DynamicProcessor.h",
+    "Source/DSP/DynamicProcessor.cpp"
+  ],
+  "forbidden_changes": [
+    "modify CMakeLists.txt or CMakePresets.json",
+    "modify Source/DSP/EnvelopeFollower.*",
+    "modify Source/DSP/ParametricBand.*",
+    "modify Source/DSP/BiquadCoefficients.* or Source/DSP/TPTFilter.*",
+    "modify tests/**",
+    "modify Source/PluginProcessor.* or Source/PluginEditor.*",
+    "add third-party dependencies",
+    "implement full multiband four-zone engine"
+  ],
+  "allowed_symbols": [
+    "DynamicProcessor",
+    "DynamicMode",
+    "DetectorSource",
+    "DetectorContext",
+    "DynamicVisualizationData",
+    "prepare",
+    "reset",
+    "process",
+    "processSample",
+    "setMode",
+    "setDetectorSource",
+    "setThresholdDb",
+    "setRatio",
+    "setKneeDb",
+    "setRangeDb",
+    "setAttackMs",
+    "setReleaseMs",
+    "getVisualizationData",
+    "currentGainLinear",
+    "currentGainReductionDb"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "DetectorContext POD carrying channel/SC taps for one sample or block",
+      "simple biquad/one-pole bandpass for band-limited detector internal to DynamicProcessor",
+      "fixed-size GR history ring for visualization",
+      "map compression vs expansion via ratio and sign conventions documented in header"
+    ],
+    "forbidden": [
+      "own CMakeLists.txt",
+      "ParametricBand process wiring",
+      "FFT-based detector",
+      "GUI components"
+    ]
+  },
+  "dependencies": [
+    "c.1"
+  ],
+  "task_timeout_seconds": 900,
+  "verification_commands": []
+}

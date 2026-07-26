@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "task_id": "i.2",
+  "phase": "I",
+  "phase_id": "i",
+  "title": "HeadroomHistogram \u2014 amplitude distribution, peak/RMS/crest, L/R/mono",
+  "description": "Implement the Headroom Histogram amplitude-distribution data pipeline per SHREDEQ_SPEC.md \u00a712.5. This is a diagnostic data module (not GUI paint) that builds dBFS bin histograms and crest/clip statistics for L/R/mono paths.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a712.5 (L/R and mono-sum distributions, sample peak, estimated true peak, RMS, crest factor, clipped-sample count, time above thresholds, headroom before/after EQ)\n- .abracapocus/SHREDEQ_SPEC.md \u00a718.3 and \u00a720 (background work; disabled analyzers stop heavy work; fixed memory)\n- Source/Analysis/AnalysisFifo.* / SpectralAnalysisEngine.* patterns for producer/consumer separation (read only)\n- Existing DSP level/meter helpers under Source/ if any (read only)\n- CMakeLists.txt (read only; i.3 owns registration and processBlock tap wiring)\n\nImplement Source/UI/HeadroomHistogram.h and Source/UI/HeadroomHistogram.cpp:\n1. HeadroomHistogram is data-only \u2014 no Component/paint code in this task.\n2. Fixed dBFS bins across a documented range (e.g. -96..0 dBFS or project-consistent span) with prepare-time bin count; histogram arrays allocated once.\n3. pushAudio / accumulate path accepts stereo (L/R) float buffers of numSamples: update L histogram, R histogram, and mono-sum ((L+R)*0.5) histogram. May be fed from a lock-free FIFO filled on the audio thread, but all heavy binning must be safe on background/message thread \u2014 if push is called from audio thread, restrict work to fixed-cost sample walks into a preallocated scratch/FIFO with no heap/locks.\n4. Metrics exposed per channel view (L, R, mono): sample peak (linear and dBFS), optional estimated true-peak hook (document simple |x| peak if full oversampled true-peak is deferred), RMS, crest factor (peak/RMS), clipped-sample count (samples at |x| >= 1 or configurable fs digital clip), time-above-threshold counters for configurable dBFS thresholds, and headroom-to-0 dBFS from current peak.\n5. Optional dual capture of pre-EQ vs post-EQ distributions via a source tag or dual histogram banks if cheap; at minimum support a single post-EQ (output) bank with API room for a second bank named pre/post.\n6. Snapshot API: copy-stable arrays of bin counts/normalized densities plus metric struct for GUI without blocking audio.\n7. setEnabled(false)/reset(): clear or freeze and idle CPU; prepare(sampleRate, maxBlockSize, numBins) bounds all memory.\n8. Numerical guards: denormals/NaNs skipped or zeroed; emptybuffers no-op; crest defined safely when RMS ~ 0.\n9. Do not touch PluginProcessor, CMakeLists, PercentileCloud, ResonancePersistenceMap, or tests.\n\nC++20/JUCE style consistent with Source/. verification_commands left empty \u2014 C++ adapter infers cmake/ctest.",
+  "acceptance_criteria": [
+    "Source/UI/HeadroomHistogram.h and Source/UI/HeadroomHistogram.cpp exist",
+    "Fixed-bin dBFS histograms are maintained for at least L, R, and mono-sum distributions with prepare-time bounded memory",
+    "Metrics include sample peak, RMS, crest factor, clipped-sample count, and headroom-to-0 dBFS (true-peak may be documented estimate)",
+    "Audio ingestion never heap-allocates; heavy work is bounded and disableable with near-zero CPU when setEnabled(false)",
+    "GUI-safe snapshot API exposes histogram bins and metrics without requiring audio-thread locks",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "antigravity_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/UI/HeadroomHistogram.h",
+    "Source/UI/HeadroomHistogram.cpp"
+  ],
+  "forbidden_changes": [
+    "modify CMakeLists.txt or CMakePresets.json",
+    "modify Source/PluginProcessor.* or Source/PluginEditor.*",
+    "modify Source/UI/PercentileCloud.*",
+    "modify Source/UI/ResonancePersistenceMap.*",
+    "modify Source/Analysis/**",
+    "modify tests/**",
+    "implement JUCE Component painting / editor integration",
+    "add third-party dependencies",
+    "unbounded histogram growth or per-block heap allocation"
+  ],
+  "allowed_symbols": [
+    "HeadroomHistogram",
+    "prepare",
+    "reset",
+    "setEnabled",
+    "pushAudio",
+    "accumulate",
+    "update",
+    "getHistogramL",
+    "getHistogramR",
+    "getHistogramMono",
+    "getMetrics",
+    "getPeakDb",
+    "getRmsDb",
+    "getCrestFactor",
+    "getClippedSampleCount",
+    "getHeadroomDb",
+    "ChannelView",
+    "HeadroomMetrics"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "fixed dBFS bin histograms with single prepare allocation",
+      "L/R/mono-sum banks and optional pre/post dual banks",
+      "audio-thread FIFO fill + background bin finalize, or bounded RT-safe accumulate",
+      "simple sample-peak proxy if full oversampled true-peak is deferred (document)"
+    ],
+    "forbidden": [
+      "own CMakeLists.txt or PluginProcessor taps",
+      "GUI paint / looks-and-feel work",
+      "FFT-based loudness engine",
+      "third-party metering libraries"
+    ]
+  },
+  "dependencies": [],
+  "verification_commands": [],
+  "task_timeout_seconds": 900
+}

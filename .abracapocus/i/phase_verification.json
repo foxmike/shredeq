@@ -1,0 +1,70 @@
+{
+  "verification": {
+    "checks": [
+      {
+        "name": "phase_i_files_exist",
+        "command": [
+          "bash",
+          "-lc",
+          "test -f Source/UI/PercentileCloud.h && test -f Source/UI/PercentileCloud.cpp && test -f Source/UI/HeadroomHistogram.h && test -f Source/UI/HeadroomHistogram.cpp && test -f Source/UI/ResonancePersistenceMap.h && test -f Source/UI/ResonancePersistenceMap.cpp && test -f Source/UI/StereoCoherenceData.h && test -f Source/UI/StereoCoherenceData.cpp && test -f Source/UI/NoteRulerData.h && test -f Source/UI/NoteRulerData.cpp && test -f tests/AnalyzerTests.cpp"
+        ]
+      },
+      {
+        "name": "cmake_lists_lists_phase_i_sources",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"PercentileCloud\\.cpp\" CMakeLists.txt && rg -q \"HeadroomHistogram\\.cpp\" CMakeLists.txt && rg -q \"ResonancePersistenceMap\\.cpp\" CMakeLists.txt && rg -q \"StereoCoherenceData\\.cpp\" CMakeLists.txt && rg -q \"NoteRulerData\\.cpp\" CMakeLists.txt && rg -q \"AnalyzerTests\\.cpp\" CMakeLists.txt"
+        ]
+      },
+      {
+        "name": "percentile_cloud_q_and_dynamic_range",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"Q_?10|Q10|percentile|Percentile\" Source/UI/PercentileCloud.h Source/UI/PercentileCloud.cpp && rg -q \"Q_?90|Q90\" Source/UI/PercentileCloud.h Source/UI/PercentileCloud.cpp && rg -q \"Q_?50|Q50|median\" Source/UI/PercentileCloud.h Source/UI/PercentileCloud.cpp && rg -q \"DynamicRange|Q_90|Q90.*Q10|Q_10\" Source/UI/PercentileCloud.h Source/UI/PercentileCloud.cpp && rg -q \"Frozen|frozen|History|2s|30s|scan|Scan\" Source/UI/PercentileCloud.h Source/UI/PercentileCloud.cpp"
+        ]
+      },
+      {
+        "name": "headroom_histogram_metrics",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"histogram|Histogram|dBFS|dBfs\" Source/UI/HeadroomHistogram.h Source/UI/HeadroomHistogram.cpp && rg -q \"crest|Crest|RMS|rms|peak|Peak\" Source/UI/HeadroomHistogram.h Source/UI/HeadroomHistogram.cpp && rg -q \"clip|Clip|mono|Mono\" Source/UI/HeadroomHistogram.h Source/UI/HeadroomHistogram.cpp"
+        ]
+      },
+      {
+        "name": "persistence_coherence_note_ruler_present",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"persist|Persist|excess|column|scroll\" Source/UI/ResonancePersistenceMap.h Source/UI/ResonancePersistenceMap.cpp && rg -q \"correlation|Correlation|mid|side|Side|mono\" Source/UI/StereoCoherenceData.h Source/UI/StereoCoherenceData.cpp && rg -q \"note|Note|MIDI|midi|f0|harmonic|tuning\" Source/UI/NoteRulerData.h Source/UI/NoteRulerData.cpp"
+        ]
+      },
+      {
+        "name": "plugin_processor_phase_i_wiring_and_quality",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"PercentileCloud|HeadroomHistogram|ResonancePersistenceMap\" Source/PluginProcessor.h Source/PluginProcessor.cpp && rg -q \"StereoCoherenceData|NoteRulerData|AnalyzerQuality|Live|Studio|Analysis\" Source/PluginProcessor.h Source/PluginProcessor.cpp Source/UI/PercentileCloud.h Source/UI/ResonancePersistenceMap.h Source/UI/NoteRulerData.h Source/UI/StereoCoherenceData.h"
+        ]
+      },
+      {
+        "name": "reuses_spectral_analysis_engine_no_second_fft_owner",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"SpectralAnalysisEngine\" Source/UI/PercentileCloud.h Source/UI/PercentileCloud.cpp Source/UI/ResonancePersistenceMap.h Source/UI/ResonancePersistenceMap.cpp Source/PluginProcessor.h Source/PluginProcessor.cpp && ! rg -q \"juce::dsp::FFT\" Source/UI/PercentileCloud.cpp Source/UI/HeadroomHistogram.cpp Source/UI/ResonancePersistenceMap.cpp"
+        ]
+      },
+      {
+        "name": "analyzer_tests_coverage_mentions",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"PercentileCloud|HeadroomHistogram|ResonancePersistenceMap|StereoCoherenceData|NoteRulerData\" tests/AnalyzerTests.cpp && rg -q \"Q10|Q90|crest|correlation|Frozen|frozen|clip\" tests/AnalyzerTests.cpp"
+        ]
+      }
+    ]
+  }
+}

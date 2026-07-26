@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "task_id": "e.3",
+  "phase": "E",
+  "phase_id": "e",
+  "title": "MultibandEngine, processBlock integration, CMakeLists",
+  "description": "Implement MultibandEngine to orchestrate crossover split, per-zone processing, and recombination; wire it into PluginProcessor; and register phase-E sources in CMakeLists.txt. This task is the sole owner of PluginProcessor.* and CMakeLists.txt for phase E.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a75 (zones, controls, display data needs)\n- Source/DSP/MultibandCrossover.h and Source/DSP/MultibandZone.h public APIs from e.1/e.2\n- Source/PluginProcessor.h/.cpp prepareToPlay/processBlock order from prior phases (TightCut, ChugStabilizer, parametric Stage A)\n- Source/ParameterIDs.h multiband_* parameter IDs\n- CMakeLists.txt target_sources patterns from phases B\u2013D\n\nImplement Source/DSP/MultibandEngine.h/.cpp:\n1. MultibandEngine owns MultibandCrossover and four MultibandZone instances (Weight, Body, Bite, Fizz).\n2. prepare/reset forwards to children; process: optional true bypass when engine disabled; else split \u2192 apply per-zone solo/mute rules (if any zone soloed, mute non-soloed) \u2192 MultibandZone::process each \u2192 recombine via complementary sum.\n3. Parameter setters or applySettings snapshot covering engine enable, three crossovers, and per-zone \u00a75.4 controls without heap in process.\n4. Lightweight getters for zone GR/energy and crossover positions for future GUI (\u00a75.5 data only \u2014 no paint).\n\nWire Source/PluginProcessor.h/.cpp:\n1. Own MultibandEngine member; prepare/reset with the graph; no heap in processBlock.\n2. Insert multiband in the established signal flow at a stage-consistent placement (document position relative to Tight Cut / Chug / parametric bands; prefer a clear Stage/pre-or-post position already implied by ParameterIDs placement fields, defaulting to a single well-defined insertion after input conditioning / stabilizer path and coordinated with existing Stage A \u2014 do not duplicate processing).\n3. Each block, push APVTS multiband parameters into MultibandEngine; honor global bypass.\n4. Disabled engine must be true bypass (no spectral tilt from leftover filters).\n\nCMakeLists.txt:\n- Add Source/DSP/MultibandCrossover.cpp, MultibandZone.cpp, MultibandEngine.cpp, and tests/MultibandTests.cpp to the correct plugin/DSP and unit-test source lists using existing style. No unrelated target refactors.\n\nDo NOT implement unit test bodies (e.4 owns tests) or rewrite crossover/zone algorithms beyond composition and wiring.",
+  "acceptance_criteria": [
+    "Source/DSP/MultibandEngine.h and Source/DSP/MultibandEngine.cpp exist and own MultibandCrossover plus four MultibandZone instances",
+    "MultibandEngine process path splits, applies zone dynamics/solo-mute, and recombines when enabled; true bypass when disabled",
+    "Source/PluginProcessor.h/.cpp own MultibandEngine, prepare it in prepareToPlay, and run it from processBlock with APVTS multiband_* parameters applied",
+    "CMakeLists.txt lists MultibandCrossover.cpp, MultibandZone.cpp, MultibandEngine.cpp, and tests/MultibandTests.cpp on the correct targets",
+    "Global bypass and engine-disabled paths do not force permanent multiband filtering",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "antigravity_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/DSP/MultibandEngine.h",
+    "Source/DSP/MultibandEngine.cpp",
+    "Source/PluginProcessor.h",
+    "Source/PluginProcessor.cpp",
+    "CMakeLists.txt"
+  ],
+  "forbidden_changes": [
+    "rewrite Source/DSP/MultibandCrossover.* algorithms",
+    "rewrite Source/DSP/MultibandZone.* algorithms",
+    "modify tests/MultibandTests.cpp body (e.4 owns content)",
+    "modify Source/PluginEditor.*",
+    "modify Source/ParameterIDs.h",
+    "modify CMakePresets.json",
+    "add third-party dependencies",
+    "broad CMake restructure or rename plugin targets",
+    "redesign bus sidechain topology or StateManager"
+  ],
+  "allowed_symbols": [
+    "MultibandEngine",
+    "MultibandCrossover",
+    "MultibandZone",
+    "ShredEQAudioProcessor",
+    "prepare",
+    "reset",
+    "process",
+    "prepareToPlay",
+    "releaseResources",
+    "processBlock",
+    "multibandEngine",
+    "setEnabled"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "embed MultibandEngine by value on the processor",
+      "compose crossover + four zones inside MultibandEngine",
+      "parameter snapshot helper local to processBlock",
+      "append phase-E sources to existing CMake lists only",
+      "true bypass when engine disabled"
+    ],
+    "forbidden": [
+      "GUI view implementation for \u00a75.5",
+      "heap allocate zone buffers per block",
+      "change sidechain bus layout",
+      "implement unit tests in this task"
+    ]
+  },
+  "dependencies": [
+    "e.1",
+    "e.2"
+  ],
+  "task_timeout_seconds": 900,
+  "verification_commands": []
+}

@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "task_id": "e.1",
+  "phase": "E",
+  "phase_id": "e",
+  "title": "LR4 crossover \u2014 complementary serial tree, smooth interpolation",
+  "description": "Implement the four-zone LR4 multiband crossover as a complementary serial tree with click-free crossover motion and ordering protection per SHREDEQ_SPEC.md \u00a75.3 and \u00a721.4.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a75.2\u20135.3 (zones, LR4 definition, crossover defaults/ranges)\n- .abracapocus/SHREDEQ_SPEC.md \u00a721.4 (reconstruction: flat magnitude when all zones unity; tolerance-based, not sample-identical)\n- Source/DSP/BiquadCoefficients.h/.cpp for Butterworth/LP/HP SOS builders (read only)\n- Source/DSP/TPTFilter.* and sibling DSP prepare/reset/process style (read only)\n- Source/ParameterIDs.h multiband crossover IDs if present (read only; do not edit)\n\nImplement Source/DSP/MultibandCrossover.h and Source/DSP/MultibandCrossover.cpp:\n1. MultibandCrossover class with prepare(sampleRate, maxBlockSize), reset(), and process that splits mono or multi-channel input into four zone buffers (Weight, Body, Bite, Fizz/Air) without heap in the process path.\n2. Each LR4 stage is two cascaded second-order Butterworth sections (Q = 1/sqrt(2)): H_LR4_LP = H_BW2_LP^2, H_LR4_HP = H_BW2_HP^2. Prefer reusing BiquadCoefficients (or equivalent project SOS) rather than inventing a new filter framework.\n3. Complementary serial tree: cascade split points so bypassed/unity zone recombination reconstructs input with flat magnitude response (phase may be frequency-dependent; do not require sample-identical dry copies).\n4. Three crossovers with defaults and clamp ranges: Weight/Body 140 Hz (40\u2013500), Body/Bite 900 Hz (150\u20133000), Bite/Fizz 4500 Hz (1000\u201312000). Provide setters that smoothly interpolate target frequencies (zipper/click-free motion).\n5. Ordering protection: enforce f1 < f2 < f3 with a small guard gap when automation would cross or collide; never allow inverted bands.\n6. Expose zone buffer access or an API MultibandEngine can call to split into four bands and later recombine (recombine may live here as sum of zone outputs, or document that Engine sums \u2014 prefer a clear sumZones or processSplit API).\n7. Optional getters for effective/smoothed crossover Hz for GUI and tests.\n\nDo NOT edit MultibandZone, MultibandEngine, PluginProcessor, CMakeLists.txt, or tests.",
+  "acceptance_criteria": [
+    "Source/DSP/MultibandCrossover.h and Source/DSP/MultibandCrossover.cpp exist",
+    "MultibandCrossover implements LR4 splits as cascaded Butterworth pairs (Q=1/sqrt(2)) in a complementary serial tree into four zones",
+    "Crossover defaults/ranges match Weight/Body 140 Hz (40\u2013500), Body/Bite 900 Hz (150\u20133000), Bite/Fizz 4500 Hz (1000\u201312000) with smooth interpolation and f1<f2<f3 ordering protection",
+    "Unity-gain recombination API yields flat magnitude reconstruction intent (documented/tolerance-friendly; not sample-identical)",
+    "No heap allocation in per-sample or per-block process paths",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "codex_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/DSP/MultibandCrossover.h",
+    "Source/DSP/MultibandCrossover.cpp"
+  ],
+  "forbidden_changes": [
+    "modify CMakeLists.txt or CMakePresets.json",
+    "modify Source/DSP/MultibandZone.*",
+    "modify Source/DSP/MultibandEngine.*",
+    "modify Source/DSP/BiquadCoefficients.* or Source/DSP/TPTFilter.* beyond include/use",
+    "modify Source/PluginProcessor.* or Source/PluginEditor.*",
+    "modify Source/ParameterIDs.h",
+    "modify tests/**",
+    "add third-party dependencies",
+    "implement MultibandZone dynamics or PluginProcessor wiring"
+  ],
+  "allowed_symbols": [
+    "MultibandCrossover",
+    "prepare",
+    "reset",
+    "process",
+    "processSplit",
+    "sumZones",
+    "setCrossover1Hz",
+    "setCrossover2Hz",
+    "setCrossover3Hz",
+    "getCrossover1Hz",
+    "getCrossover2Hz",
+    "getCrossover3Hz",
+    "getZoneBuffer"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "reuse BiquadCoefficients Butterworth/LP/HP SOS for LR4 pairs",
+      "float buffer API matching sibling DSP modules",
+      "own internal zone scratch buffers sized at prepare",
+      "minimum frequency guard gap for ordering protection"
+    ],
+    "forbidden": [
+      "own CMakeLists.txt target_sources",
+      "wire PluginProcessor processBlock",
+      "implement per-zone dynamics (MultibandZone)",
+      "GUI paint or APVTS layout ownership",
+      "require sample-identical reconstruction tests in this task"
+    ]
+  },
+  "dependencies": [],
+  "task_timeout_seconds": 900,
+  "verification_commands": []
+}

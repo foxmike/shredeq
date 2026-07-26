@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "task_id": "j.3",
+  "phase": "J",
+  "phase_id": "j",
+  "title": "InspectorPanel \u2014 full-width parameter editor for selected band",
+  "description": "Implement the bottom full-width band inspector so every essential per-band parameter is editable without hidden context menus, per SHREDEQ_SPEC.md \u00a713.5.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a713.5 bottom inspector parameter list\n- Source/ParameterIDs.h for band-scoped frequency/gain/Q/type/slope/stage/routing/dynamics/detector/tracking/solo/bypass IDs\n- Source/UI/ShredEQLookAndFeel.* for control styling from j.1\n- JUCE AudioProcessorValueTreeState SliderAttachment / ComboBoxAttachment / ButtonAttachment patterns\n\nImplement Source/UI/InspectorPanel.h and Source/UI/InspectorPanel.cpp:\n1. juce::Component full-width strip intended for editor bottom docking.\n2. On setSelectedBand(int index) rebuild or reattach controls for that band\u2019s parameters via APVTS (constructor takes juce::AudioProcessorValueTreeState&).\n3. Controls covering: frequency, gain, Q, filter type, slope, stage, routing (stereo/L/R/M/S as modeled by ParameterIDs), dynamic mode, threshold, range, attack, hold, release, knee, detector source, detector filter, tracking enable/source, solo, bypass.\n4. Double-click numeric readout / label fields support juce::Label edit for numerical entry where practical.\n5. Empty/no-selection state shows a muted placeholder; no crash on band index out of range (clamp or clear attachments).\n6. Layout: horizontal or wrapping grid readable at min editor width ~980; do not require popup menus for essential parameters.\n7. Optional solo headphone / delta (hear removed) buttons if ParameterIDs exist; otherwise expose callbacks.\n\nDo not implement EQWorkspace graph, IntelligenceDrawer modules, PluginEditor assembly, or CMakeLists.txt.",
+  "acceptance_criteria": [
+    "Source/UI/InspectorPanel.h and Source/UI/InspectorPanel.cpp exist",
+    "InspectorPanel constructs with juce::AudioProcessorValueTreeState reference and setSelectedBand(int) API",
+    "Inspector exposes controls for frequency, gain, Q, type, slope, stage, routing, dynamics (mode/threshold/range/attack/hold/release/knee), detector source/filter, tracking, solo, and bypass",
+    "Essential band parameters are editable from the inspector without requiring a context menu",
+    "Numerical entry is supported via editable labels or equivalent double-click value entry for primary continuous params",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "antigravity_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/UI/InspectorPanel.h",
+    "Source/UI/InspectorPanel.cpp"
+  ],
+  "forbidden_changes": [
+    "modify Source/PluginEditor.*",
+    "modify CMakeLists.txt or CMakePresets.json",
+    "modify Source/PluginProcessor.*",
+    "modify Source/ParameterIDs.h inventory",
+    "modify Source/UI/EQWorkspace.* or Source/UI/BandNode.*",
+    "modify Source/UI/ShredEQLookAndFeel.*",
+    "modify Source/UI/IntelligenceDrawer.*",
+    "add third-party dependencies",
+    "hide essential band parameters exclusively behind popup menus"
+  ],
+  "allowed_symbols": [
+    "InspectorPanel",
+    "setSelectedBand",
+    "getSelectedBand",
+    "resized",
+    "paint",
+    "attachBand",
+    "clearAttachments"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "APVTS SliderAttachment/ComboBoxAttachment/ButtonAttachment occupancy",
+      "rebuild-on-select or pooled 12-band control banks",
+      "wrapping FlexBox/Grid layout for narrow widths"
+    ],
+    "forbidden": [
+      "own global header or view-mode switching",
+      "CMake registration",
+      "DSP processBlock changes",
+      "redesign ParameterIDs schema"
+    ]
+  },
+  "dependencies": [
+    "j.1"
+  ],
+  "verification_commands": [],
+  "task_timeout_seconds": 900
+}

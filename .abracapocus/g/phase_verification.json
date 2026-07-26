@@ -1,0 +1,62 @@
+{
+  "verification": {
+    "checks": [
+      {
+        "name": "phase_g_files_exist",
+        "command": [
+          "bash",
+          "-lc",
+          "test -f Source/Analysis/SpectralAnalysisEngine.h && test -f Source/Analysis/SpectralAnalysisEngine.cpp && test -f Source/Analysis/AnalysisFifo.h && test -f Source/Analysis/AnalysisFifo.cpp && test -f Source/DSP/ResonanceDetector.h && test -f Source/DSP/ResonanceDetector.cpp && test -f Source/DSP/ResonanceSuppressor.h && test -f Source/DSP/ResonanceSuppressor.cpp && test -f tests/ResonanceTests.cpp"
+        ]
+      },
+      {
+        "name": "cmake_lists_lists_phase_g_sources",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"AnalysisFifo\\.cpp\" CMakeLists.txt && rg -q \"SpectralAnalysisEngine\\.cpp\" CMakeLists.txt && rg -q \"ResonanceDetector\\.cpp\" CMakeLists.txt && rg -q \"ResonanceSuppressor\\.cpp\" CMakeLists.txt && rg -q \"ResonanceTests\\.cpp\" CMakeLists.txt"
+        ]
+      },
+      {
+        "name": "spectral_engine_stft_and_fifo_present",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"Hann|hann|FFT|fft|STFT|stft\" Source/Analysis/SpectralAnalysisEngine.h Source/Analysis/SpectralAnalysisEngine.cpp && rg -q \"AbstractFifo|Fifo|FIFO|pushAudio|hop\" Source/Analysis/SpectralAnalysisEngine.h Source/Analysis/SpectralAnalysisEngine.cpp Source/Analysis/AnalysisFifo.h Source/Analysis/AnalysisFifo.cpp && rg -q \"skip|overload|enabled|Thread|TimeSlice\" Source/Analysis/SpectralAnalysisEngine.h Source/Analysis/SpectralAnalysisEngine.cpp"
+        ]
+      },
+      {
+        "name": "resonance_detector_persistence_and_harmonic_rejection",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"persist|Persist|lambda|excess|baseline\" Source/DSP/ResonanceDetector.h Source/DSP/ResonanceDetector.cpp && rg -q \"f0|harmonic|PitchDetector|confidence|candidate|Candidate\" Source/DSP/ResonanceDetector.h Source/DSP/ResonanceDetector.cpp"
+        ]
+      },
+      {
+        "name": "resonance_suppressor_six_slots_and_scan",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"slot|Slot|notch|Notch\" Source/DSP/ResonanceSuppressor.h Source/DSP/ResonanceSuppressor.cpp && rg -q \"6|kNumSlots|numSlots|six\" Source/DSP/ResonanceSuppressor.h Source/DSP/ResonanceSuppressor.cpp && rg -q \"[Ss]can|applyCandidate|audition|removed\" Source/DSP/ResonanceSuppressor.h Source/DSP/ResonanceSuppressor.cpp Source/PluginProcessor.h Source/PluginProcessor.cpp"
+        ]
+      },
+      {
+        "name": "plugin_processor_phase_g_wiring",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"SpectralAnalysisEngine|ResonanceDetector|ResonanceSuppressor\" Source/PluginProcessor.h Source/PluginProcessor.cpp"
+        ]
+      },
+      {
+        "name": "resonance_tests_coverage_mentions",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"SpectralAnalysisEngine|ResonanceDetector|ResonanceSuppressor|persist|notch|scan|harmonic|f0\" tests/ResonanceTests.cpp"
+        ]
+      }
+    ]
+  }
+}

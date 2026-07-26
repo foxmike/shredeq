@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "task_id": "j.5",
+  "phase": "J",
+  "phase_id": "j",
+  "title": "PluginEditor assembly \u2014 view modes, header, resizing, wiring, CMakeLists",
+  "description": "Fan-in task: assemble ShredEQAudioProcessorEditor layout with global header, view modes, EQWorkspace, InspectorPanel, IntelligenceDrawer, LookAndFeel, resize policy, and CMakeLists registration. Sole owner of Source/PluginEditor.* and CMakeLists.txt in phase J per async_notes.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a713.1 window behavior, \u00a713.2 global header, \u00a713.7 view modes (Sculpt/Diagnose/Dynamics), \u00a713.8 interaction (undo/redo, magnifiers already handled in children)\n- Source/PluginEditor.* skeleton from phase A\n- Source/UI/ShredEQLookAndFeel.*, EQWorkspace.*, BandNode.*, InspectorPanel.*, IntelligenceDrawer.* public APIs from j.1\u2013j.4\n- Source/PluginProcessor.h for APVTS, analyzer snapshot accessors, createEditor\n- Source/StateManager.* A/B and preset APIs if present\n- CMakeLists.txt target_sources append patterns from prior phases\n\nImplement Source/PluginEditor.h/.cpp:\n1. Own ShredEQLookAndFeel (setDefaultLookAndFeel / setLookAndFeel on editor); restore on destruction.\n2. Default size ~1360\u00d7820; setResizeLimits min ~980\u00d7620; setResizable(true, true); high-DPI via default JUCE affine \u2014 no custom DPI hacks required beyond Desktop scale awareness.\n3. Global header row controls (wire to APVTS/StateManager where IDs/APIs exist): preset browser hook, profile selector, tuning selector, A/B switch, copy A\u2192B, undo/redo buttons (AudioProcessorEditor undo manager or processor-provided), global bypass, gain-matched bypass/audition, analyzer enable, latency readout, CPU indicator stub, help/menu buttons.\n4. View mode switcher: Sculpt | Diagnose | Dynamics. EQ curve remains visible in all modes; Diagnose emphasizes percentile/resonance/dynamic-range overlays on EQWorkspace; Dynamics emphasizes multiband zones / detector / sidechain collision overlay flags. Mode only toggles overlay flags and optional non-EQ panels \u2014 does not remove the EQ curve.\n5. Layout: header top; IntelligenceDrawer left or right; EQWorkspace center; InspectorPanel bottom full width under workspace (drawer may span full height or leave test room \u2014 document choice in comments).\n6. Wire workspace selection \u2192 InspectorPanel::setSelectedBand; timer/callback (~30\u201360 Hz UI) to pull response curves and analyzer snapshots from processor without audio-thread work in editor paint beyond reading latest atomics/snapshots.\n7. Keyboard: Delete forwards to workspace remove-selected; undo/redo keys if host allows.\n\nCMakeLists.txt:\n1. Append Source/UI/ShredEQLookAndFeel.cpp, EQWorkspace.cpp, BandNode.cpp, InspectorPanel.cpp, IntelligenceDrawer.cpp and ensure PluginEditor.cpp remains listed.\n2. Append-only minimal edits \u2014 no target renames or preset churn.\n\nDo not rewrite DSP modules or ParameterIDs inventory. verification_commands left empty.",
+  "acceptance_criteria": [
+    "Source/PluginEditor.h/.cpp construct ShredEQAudioProcessorEditor with LookAndFeel installed and default size approximately 1360x820",
+    "Editor setResizeLimits (or equivalent) enforce minimum approximately 980x620 and remain user-resizable",
+    "Editor hosts EQWorkspace, InspectorPanel, and IntelligenceDrawer in resized() layout with a global header row",
+    "View modes Sculpt, Diagnose, and Dynamics exist and keep the EQ curve visible while changing diagnostic/dynamics overlay emphasis",
+    "Selected band in EQWorkspace updates InspectorPanel",
+    "CMakeLists.txt lists ShredEQLookAndFeel.cpp, EQWorkspace.cpp, BandNode.cpp, InspectorPanel.cpp, and IntelligenceDrawer.cpp on the plugin target",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "antigravity_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/PluginEditor.h",
+    "Source/PluginEditor.cpp",
+    "CMakeLists.txt"
+  ],
+  "forbidden_changes": [
+    "rewrite Source/UI/ShredEQLookAndFeel.* / EQWorkspace.* / BandNode.* / InspectorPanel.* / IntelligenceDrawer.* algorithms beyond include/use (those tasks own implementation)",
+    "modify Source/PluginProcessor.* unless a one-line createEditor/accessor is already missing \u2014 prefer existing processor APIs; do not take DSP ownership",
+    "modify Source/ParameterIDs.h",
+    "modify CMakePresets.json",
+    "broad CMake restructure or rename targets",
+    "add third-party dependencies",
+    "implement new DSP modules in this task"
+  ],
+  "allowed_symbols": [
+    "ShredEQAudioProcessorEditor",
+    "ShredEQLookAndFeel",
+    "EQWorkspace",
+    "InspectorPanel",
+    "IntelligenceDrawer",
+    "ViewMode",
+    "Sculpt",
+    "Diagnose",
+    "Dynamics",
+    "setViewMode",
+    "getViewMode",
+    "resized",
+    "paint",
+    "timerCallback"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "editor-owned LookAndFeel instance",
+      "Sculpt/Diagnose/Dynamics enum driving EQWorkspace overlay flags",
+      "UI timer for curve/analyzer snapshot refresh",
+      "append-only CMake target_sources for phase-J UI cpp files",
+      "header controls as stubs when StateManager/APVTS IDs missing with TODOs"
+    ],
+    "forbidden": [
+      "reimplementing child panel internals",
+      "CMake target rename/restructure",
+      "moving processBlock logic into the editor",
+      "second FFT owner in the GUI"
+    ]
+  },
+  "dependencies": [
+    "j.1",
+    "j.2",
+    "j.3",
+    "j.4"
+  ],
+  "verification_commands": [],
+  "task_timeout_seconds": 1200
+}

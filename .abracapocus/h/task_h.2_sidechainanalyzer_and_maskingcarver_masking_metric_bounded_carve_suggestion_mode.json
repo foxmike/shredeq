@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "task_id": "h.2",
+  "phase": "H",
+  "phase_id": "h",
+  "title": "SidechainAnalyzer and MaskingCarver \u2014 masking metric, bounded carve, suggestion mode",
+  "description": "Implement external-sidechain masking analysis and bounded carve processing per SHREDEQ_SPEC.md \u00a710. v1.0 uses host external sidechain only (no private IPC).\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a710.1\u201310.5 (purpose, Overlap/Dominance/Masking metrics, G_carve, modes, collision map, product boundary)\n- .abracapocus/SHREDEQ_SPEC.md \u00a718 (audio-thread rules; fixed memory; disable heavy work when off)\n- Source/Analysis/SpectralAnalysisEngine.* multi-consumer / power accumulation patterns if present (read only; may build ERB/octave bands independently with fixed filters or simple band power accumulators)\n- Source/DSP/DynamicProcessor.* / ParametricBand.* bell dynamics patterns for carve filter style (read only)\n- Source/ParameterIDs.h sidechain / lockIn / carve params if present (read only)\n- CMakeLists.txt (read only; h.5 owns registration)\n\nImplement Source/DSP/SidechainAnalyzer.h and Source/DSP/SidechainAnalyzer.cpp:\n1. Accumulate main and sidechain power into a fixed number of ERB- or octave-spaced bands (document band count; fixed at prepare).\n2. Per band compute:\n   Overlap(b,t) = min(P_M,P_S)/(max(P_M,P_S)+eps)\n   Dominance(b,t) = P_S/(P_M+P_S+eps)\n   Masking(b,t) = Overlap * Dominance * A_S(b,t)\n   with sidechain activity gate A_S and epsilon floors; all finite.\n3. prepare/reset/process or pushMain/pushSidechain block APIs: audio-thread safe copies or lightweight band filters; no heap in process; when disabled, near-zero work.\n4. Collision map data for GUI: fixed-capacity recent time \u00d7 frequency masking scores (fixed history depth at prepare); getters for latest Masking vector, optional dominant-source flag, G_carve request per band. No paint/UI code.\n5. Graceful absence of sidechain: if sidechain channels unavailable / silent, Masking\u21920 and carve recommendations idle (standalone-safe).\n\nImplement Source/DSP/MaskingCarver.h and Source/DSP/MaskingCarver.cpp:\n1. Apply bounded carve gains using a small fixed number of dynamic bell filters (document max bands, e.g. 4\u20138).\n   G_carve(b,t) = -min(G_max, K * max(0, Masking(b,t) - T)) with exposed G_max, K, T.\n2. Modes (data/flags even if processor wiring later):\n   - Suggestion mode: convert high-collision bands into editable suggestion descriptors (center Hz, Q, suggested depth) without altering audible audio until accepted.\n   - Auto mode: apply carve ONLY on explicitly enabled carver bands (never silent auto-everything).\n3. prepare/reset/process stereo (and optional mid-only/side-only placement hooks if cheap); smoothed gains; clamp depths; true bypass when module/all bands disabled.\n4. APIs to import analyzer metrics, enable individual carver bands, read suggestion list (fixed capacity), and clear suggestions.\n5. No PluginProcessor, MidSideRouter, LookaheadDelay, MonoGuard, tests, or CMakeLists changes.\n\nC++20/JUCE style consistent with Source/. verification_commands left empty.",
+  "acceptance_criteria": [
+    "Source/DSP/SidechainAnalyzer.h/.cpp and Source/DSP/MaskingCarver.h/.cpp exist",
+    "SidechainAnalyzer computes Overlap, Dominance, and Masking with A_S gate over fixed ERB/octave bands per SHREDEQ_SPEC.md \u00a710.2",
+    "Collision-map / latest-masking getters expose fixed-capacity frequency\u00d7time (or latest vector + history) data without GUI code",
+    "MaskingCarver applies G_carve = -min(G_max, K*max(0, Masking-T)) via a small fixed set of dynamic bells with true bypass when disabled",
+    "Suggestion mode yields editable descriptors without audible change; Auto mode applies only explicitly enabled carver bands",
+    "Missing/silent sidechain yields zero masking / idle carve (standalone-safe); no heap in process paths",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "codex_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/DSP/SidechainAnalyzer.h",
+    "Source/DSP/SidechainAnalyzer.cpp",
+    "Source/DSP/MaskingCarver.h",
+    "Source/DSP/MaskingCarver.cpp"
+  ],
+  "forbidden_changes": [
+    "modify CMakeLists.txt or CMakePresets.json",
+    "modify Source/PluginProcessor.* or Source/PluginEditor.*",
+    "modify Source/DSP/MidSideRouter.*",
+    "modify Source/DSP/MonoGuard.*",
+    "modify Source/DSP/LookaheadDelay.*",
+    "modify Source/Analysis/**",
+    "modify Source/ParameterIDs.h",
+    "modify tests/**",
+    "implement private inter-plugin sidechain IPC",
+    "auto-apply all suggestions to audible path without explicit band enable/accept"
+  ],
+  "allowed_symbols": [
+    "SidechainAnalyzer",
+    "MaskingCarver",
+    "MaskingSuggestion",
+    "CarverBand",
+    "prepare",
+    "reset",
+    "process",
+    "pushMain",
+    "pushSidechain",
+    "setEnabled",
+    "getMasking",
+    "getOverlap",
+    "getDominance",
+    "getCollisionMap",
+    "getSuggestions",
+    "setCarverBandEnabled",
+    "setCarveMaxGain",
+    "setCarveThreshold",
+    "setMode",
+    "applySuggestions",
+    "G_carve"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "fixed ERB or octave filterbank with preallocated band powers",
+      "small fixed dynamic-bell bank for carves reusing project biquad/TPT style",
+      "suggestion structs in fixed array with accept/enable gating",
+      "idle path when sidechain energy below activity gate"
+    ],
+    "forbidden": [
+      "own CMakeLists.txt",
+      "PluginProcessor wiring",
+      "unbounded collision history",
+      "GUI collision-map painting",
+      "private network/IPC sidechain transport"
+    ]
+  },
+  "dependencies": [],
+  "verification_commands": [],
+  "task_timeout_seconds": 900
+}

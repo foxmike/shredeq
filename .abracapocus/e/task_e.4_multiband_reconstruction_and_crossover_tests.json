@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "task_id": "e.4",
+  "phase": "E",
+  "phase_id": "e",
+  "title": "Multiband reconstruction and crossover tests",
+  "description": "Add juce::UnitTest coverage for MultibandCrossover / MultibandEngine reconstruction and crossover behavior per SHREDEQ_SPEC.md \u00a75.3 and \u00a721.4.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- Source/DSP/MultibandCrossover.*, MultibandZone.*, MultibandEngine.* public APIs\n- tests/TestMain.cpp and existing tests/*Tests.cpp patterns (phases B\u2013D)\n- CMakeLists.txt as left by e.3 (tests/MultibandTests.cpp should already be listed \u2014 do not edit CMake unless the entry is missing, then append only that path)\n- .abracapocus/SHREDEQ_SPEC.md \u00a75.3 crossover defaults/ranges and \u00a721.4 reconstruction requirements\n\nImplement tests/MultibandTests.cpp:\n1. Reconstruction: with all zone gains at unity and dynamics inactive/bypassed, broadband or multi-sine probe through MultibandEngine (or crossover split+sum) has flat magnitude vs dry within a documented tolerance (e.g. maxima of band FFT or multi-frequency tone magnitudes within ~\u00b10.5 dB or tighter if stable) \u2014 NOT sample-identical (LR4 phase is frequency-dependent).\n2. Enabling the engine at unity settings does not produce a large level jump versus bypass (RMS or peak within tolerance).\n3. Crossover motion: sweeping crossover frequencies across a block/sequence yields finite output with no NaNs/Inf and no impulsive click artifacts beyond a stated peak transient bound versus a static-crossover control (energy or max-delta check).\n4. Ordering protection: attempting to set crossovers out of order results in f1 < f2 < f3 effective frequencies.\n5. Default crossover centers approximate 140 / 900 / 4500 Hz after prepare.\n6. Solo/mute (if exposed): soloing one zone suppresses others in the sum; mute silences that zone.\n7. reset() clears filter memory (finite output after impulse; no NaNs).\n\nUse juce::UnitTest only; no Catch2/GoogleTest. Prefer public APIs; do not rewrite production DSP solely to force greens. Tolerance-based float compares with clear expect messages.\n\nCMakeLists.txt is owned by e.3 \u2014 avoid editing unless the MultibandTests.cpp source entry is missing.",
+  "acceptance_criteria": [
+    "tests/MultibandTests.cpp exists and registers juce::UnitTest coverage for multiband reconstruction, enable level jump, and crossover behavior",
+    "Reconstruction assertions use magnitude/RMS tolerances (not sample-identical equality) with dynamics inactive and unity zone gains",
+    "Tests cover crossover ordering protection and finite/click-bounded output under crossover motion",
+    "No production DSP algorithm rewrites solely to force green tests",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "pi_cli",
+  "model": "openrouter/z-ai/glm-5.2",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "tests/MultibandTests.cpp"
+  ],
+  "forbidden_changes": [
+    "modify Source/DSP/MultibandCrossover.*",
+    "modify Source/DSP/MultibandZone.*",
+    "modify Source/DSP/MultibandEngine.*",
+    "modify Source/PluginProcessor.*",
+    "modify CMakeLists.txt except emergency single-line append of missing MultibandTests.cpp",
+    "modify CMakePresets.json",
+    "modify Source/PluginEditor.*",
+    "add Catch2/GoogleTest/third-party test frameworks",
+    "change production DSP algorithms solely to force green tests"
+  ],
+  "allowed_symbols": [
+    "MultibandTests",
+    "runTest",
+    "MultibandCrossover",
+    "MultibandZone",
+    "MultibandEngine"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "juce::UnitTest subclass in tests/MultibandTests.cpp",
+      "synthetic sines, impulses, and broadband probes",
+      "tolerance-based magnitude/RMS comparisons for LR4 reconstruction",
+      "emergency CMake one-line append only if test source missing"
+    ],
+    "forbidden": [
+      "processor/editor wiring",
+      "broad CMake refactors",
+      "host integration tests",
+      "sample-identical dry vs wet requirements"
+    ]
+  },
+  "dependencies": [
+    "e.1",
+    "e.2",
+    "e.3"
+  ],
+  "task_timeout_seconds": 900,
+  "verification_commands": []
+}

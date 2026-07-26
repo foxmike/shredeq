@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "task_id": "h.1",
+  "phase": "H",
+  "phase_id": "h",
+  "title": "MidSideRouter \u2014 stage-level encode/decode, side high-pass",
+  "description": "Implement stage-level Mid/Side encode/decode performed ONCE around the parametric stages (not per-band), with configurable side high-pass per SHREDEQ_SPEC.md \u00a711.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a711.1\u201311.3 (M/S guitar-bus uses; side HPF 120\u2013300 Hz; ShredWidth boundary \u2014 no delay-based width/decorrelation)\n- .abracapocus/SHREDEQ_SPEC.md \u00a719.1 (M/S processing adds 0 samples default latency)\n- Source/DSP/ParametricBand.* stereo routing notes from phase B (bands process L/R or mid/side samples the router supplies \u2014 do not add per-band M/S matrices)\n- Sibling Source/DSP/* prepare/reset/process patterns (read only)\n- Source/ParameterIDs.h sideHighPass / M/S related IDs if present (read only)\n- CMakeLists.txt (read only; h.5 owns registration)\n\nImplement Source/DSP/MidSideRouter.h and Source/DSP/MidSideRouter.cpp:\n1. MidSideRouter is the sole stage-level M/S matrix for parametric (and related) stages. encode once before the stage chain; decode once after. Document that ParametricBand must not embed its own encode/decode.\n2. Encoding (stereo L/R \u2192 M/S): Mid = 0.5*(L+R), Side = 0.5*(L-R) (or project-consistent orthonormal scaling \u2014 document constant and keep encode/decode energy-preserving / inverse pair).\n3. Decoding (M/S \u2192 L/R): exact inverse of encode. Mono input: pass-through; side path silent or zeroed as appropriate; no upmix.\n4. Side high-pass: configurable cutoff in 120\u2013300 Hz range (smoothed). Applies only to the Side channel after encode / before decode. True bypass of HPF when disabled or when M/S path inactive. Use modulation-stable 1st/2nd-order HPF consistent with existing project filters (TPT/biquad).\n5. APIs: prepare(sampleRate, maxBlockSize), reset(), setEnabled(bool), setSideHighPassEnabled(bool), setSideHighPassHz(float clamped 120\u2013300), processEncode(float* left, float* right, int numSamples) and processDecode(...) OR in-place process that takes a stage callback / buffer pair \u2014 prefer clear encode \u2192 external stage processing in caller's domain \u2192 decode so PluginProcessor (h.5) can wrap stages without the router owning ParametricBand.\n6. Optional lightweight getters for whether current buffer is in M/S domain and current side HPF Hz for diagnostics.\n7. Audio-thread safe: no heap, no locks, no allocations in process*; coefficient smoothing only; finite checks.\n8. True bypass when router disabled: L/R unchanged (bit-identical or float-near-identical). Zero added latency.\n9. No MonoGuard, SidechainAnalyzer, LookaheadDelay, PluginProcessor, tests, or CMakeLists changes in this task.\n\nC++20/JUCE style consistent with Source/. verification_commands left empty \u2014 C++ adapter infers cmake/ctest.",
+  "acceptance_criteria": [
+    "Source/DSP/MidSideRouter.h and Source/DSP/MidSideRouter.cpp exist",
+    "MidSideRouter performs stage-level encode once and decode once with inverse L/R\u2194M/S pair (no per-band matrix inside this module)",
+    "Side high-pass applies only to Side with cutoff clampable to 120\u2013300 Hz and true bypass when disabled",
+    "processEncode/processDecode (or documented equivalent) paths are allocation-free and add zero samples of latency",
+    "Disabled/router-bypass leaves stereo L/R unchanged; mono layouts pass through safely",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "antigravity_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/DSP/MidSideRouter.h",
+    "Source/DSP/MidSideRouter.cpp"
+  ],
+  "forbidden_changes": [
+    "modify CMakeLists.txt or CMakePresets.json",
+    "modify Source/PluginProcessor.* or Source/PluginEditor.*",
+    "modify Source/DSP/ParametricBand.*",
+    "modify Source/DSP/MonoGuard.*",
+    "modify Source/DSP/SidechainAnalyzer.* or Source/DSP/MaskingCarver.*",
+    "modify Source/DSP/LookaheadDelay.*",
+    "modify Source/ParameterIDs.h",
+    "modify tests/**",
+    "implement delay-based width, decorrelation, or artificial stereo (ShredWidth boundary)",
+    "add per-band M/S encode inside ParametricBand"
+  ],
+  "allowed_symbols": [
+    "MidSideRouter",
+    "prepare",
+    "reset",
+    "setEnabled",
+    "setSideHighPassEnabled",
+    "setSideHighPassHz",
+    "processEncode",
+    "processDecode",
+    "encode",
+    "decode",
+    "isMidSideDomain",
+    "getSideHighPassHz"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "0.5*(L\u00b1R) or equivalent documented orthonormal M/S pair",
+      "reuse project TPT/biquad first-order or second-order HPF on Side only",
+      "separate encode/decode entry points so Processor wraps external stages",
+      "parameter smoothing on side HPF cutoff"
+    ],
+    "forbidden": [
+      "own CMakeLists.txt target_sources",
+      "PluginProcessor processBlock wiring",
+      "MonoGuard coherence analysis inside this module",
+      "lookahead delay or PDC",
+      "per-band M/S matrices"
+    ]
+  },
+  "dependencies": [],
+  "verification_commands": [],
+  "task_timeout_seconds": 900
+}

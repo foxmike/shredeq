@@ -1,0 +1,62 @@
+{
+  "verification": {
+    "checks": [
+      {
+        "name": "phase_k_files_exist",
+        "command": [
+          "bash",
+          "-lc",
+          "test -f Source/StateManager.h && test -f Source/StateManager.cpp && test -f Source/Profiles.h && test -f Source/Profiles.cpp && test -f Source/PluginProcessor.h && test -f Source/PluginProcessor.cpp && test -f Source/PluginEditor.cpp && test -f CMakeLists.txt && test -f Resources/Presets/PreAmp_TightSixString.json && test -f Resources/Presets/Rhythm_ModernCleanup.json && test -f Resources/Presets/Lead_SingingFocus.json && test -f Resources/Presets/Bass_ClangControl.json && test -f Resources/Presets/Diag_FindResonances.json && test -f tests/StateTests.cpp"
+        ]
+      },
+      {
+        "name": "cmake_lists_phase_k_sources",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"Profiles\\.cpp\" CMakeLists.txt && rg -q \"StateManager\\.cpp\" CMakeLists.txt && rg -q \"StateTests\\.cpp\" CMakeLists.txt"
+        ]
+      },
+      {
+        "name": "ab_and_gain_match_apis",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"copyAtoB|copyAToB|copy.*A.*B\" Source/StateManager.h Source/StateManager.cpp && rg -q \"A/B|ActiveSlot|abState|switchActive|slot\" Source/StateManager.h Source/StateManager.cpp && rg -q \"[Mm]atch|[Gg]ainMatch|G_match|getMatchGain\" Source/StateManager.h Source/StateManager.cpp && rg -q \"freeze|Freeze\" Source/StateManager.h Source/StateManager.cpp"
+        ]
+      },
+      {
+        "name": "profiles_placement_and_tuning",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"Pre-Amp|PreAmp|Rhythm|Lead|Bass\" Source/Profiles.h Source/Profiles.cpp && rg -q \"E Standard|Drop D|tuning|Tuning\" Source/Profiles.h Source/Profiles.cpp && rg -q \"Placement|placement\" Source/Profiles.h Source/Profiles.cpp"
+        ]
+      },
+      {
+        "name": "factory_presets_categorized",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"schema_version|category|Category\" Resources/Presets/PreAmp_TightSixString.json Resources/Presets/Rhythm_ModernCleanup.json Resources/Presets/Lead_SingingFocus.json Resources/Presets/Bass_ClangControl.json Resources/Presets/Diag_FindResonances.json"
+        ]
+      },
+      {
+        "name": "delta_audition_and_processor_wiring",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"DeltaAudition|RejectedSignal|deltaAudition|removed.signal|ListenRemoved\" Source/PluginProcessor.h Source/PluginProcessor.cpp && rg -q \"StateManager|Profiles|crossfade|Crossfade|gainMatch|GainMatch|profileIndex|tuningIndex\" Source/PluginProcessor.h Source/PluginProcessor.cpp Source/PluginEditor.cpp"
+        ]
+      },
+      {
+        "name": "state_tests_coverage_symbols",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"UnitTest\" tests/StateTests.cpp && rg -q \"StateManager|A/B|copyA|GainMatch|Profile|Preset|schema\" tests/StateTests.cpp"
+        ]
+      }
+    ]
+  }
+}

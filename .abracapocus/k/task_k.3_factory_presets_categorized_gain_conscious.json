@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "task_id": "k.3",
+  "phase": "K",
+  "phase_id": "k",
+  "title": "Factory presets \u2014 categorized, gain-conscious",
+  "description": "Author factory preset JSON files under Resources/Presets/ that are categorized and gain-conscious per SHREDEQ_SPEC.md \u00a716. Useful starting points, not marketing demos.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a716 categories (Pre-Amp, Rhythm Post-Cab, Lead, Stereo Bus, Bass, Diagnostic) and naming spirit\n- Source/Profiles.h placement/tuning ids and names from k.2 (category alignment)\n- Source/StateManager.* factory load expectations (file names under Resources/Presets/, XML/ValueTree or JSON scheme used by listFactoryPresets/loadFactoryPreset \u2014 match whatever StateManager already documents; if dual format required, prefer JSON objects that StateManager can parse or that mirror APVTS property names)\n- Source/ParameterIDs.h string IDs for parameters written into presets (read only)\n- schema_version convention from StateManager\n\nCreate these factory presets (exact filenames):\n1. Resources/Presets/PreAmp_TightSixString.json \u2014 Pre-Amp category; 6-string DI / tight input; modest input control, restrained mid push, gain-conscious (output/makeup near 0 dB unity intent)\n2. Resources/Presets/Rhythm_ModernCleanup.json \u2014 Rhythm Post-Cab cleanup; palm-mute/low-mid stability hints via enabled modules and mild cuts; no extreme boosts\n3. Resources/Presets/Lead_SingingFocus.json \u2014 Lead singing focus; upper-mid polish without harsh +12 dB spikes; optional note-follower friendly defaults if IDs exist\n4. Resources/Presets/Bass_ClangControl.json \u2014 Bass clang control; low fundamental-friendly HPF/notches restraint; gain-conscious\n5. Resources/Presets/Diag_FindResonances.json \u2014 Diagnostic find-resonances; analyzer-oriented / mild resonance-scan friendly defaults; not a loud rock preset\n\nEach JSON must include at minimum:\n- schema_version\n- name / category fields\n- placement profile and tuning references by name or index consistent with Profiles\n- parameter map using ParameterIDs string keys with numeric/enum values inside valid ranges\n- comments or meta field noting gain-conscious design (unity-ish outputGain / no stacked +20 dB stages)\n\nDo not invent binary BinaryData codegen here (k.4 may juce_add_binary_data or path load). Do not edit C++ sources. verification_commands left empty.",
+  "acceptance_criteria": [
+    "Resources/Presets/PreAmp_TightSixString.json exists with Pre-Amp category metadata and schema_version",
+    "Resources/Presets/Rhythm_ModernCleanup.json exists with Rhythm category metadata",
+    "Resources/Presets/Lead_SingingFocus.json exists with Lead category metadata",
+    "Resources/Presets/Bass_ClangControl.json exists with Bass category metadata",
+    "Resources/Presets/Diag_FindResonances.json exists with Diagnostic category metadata",
+    "Each preset references placement/tuning consistently with Profiles and uses ParameterIDs-style keys with in-range values and restrained output/makeup gain",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "pi_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Resources/Presets/PreAmp_TightSixString.json",
+    "Resources/Presets/Rhythm_ModernCleanup.json",
+    "Resources/Presets/Lead_SingingFocus.json",
+    "Resources/Presets/Bass_ClangControl.json",
+    "Resources/Presets/Diag_FindResonances.json"
+  ],
+  "forbidden_changes": [
+    "modify Source/**",
+    "modify CMakeLists.txt",
+    "modify tests/**",
+    "add extreme gain stacks or clip-marketing presets",
+    "add third-party dependencies"
+  ],
+  "allowed_symbols": [],
+  "decision_budget": {
+    "allowed": [
+      "JSON preset documents with schema_version, category, profile refs, parameter maps",
+      "conservative musically plausible default values within ParameterIDs ranges"
+    ],
+    "forbidden": [
+      "C++ or CMake edits",
+      "binary preset formats",
+      "hidden non-user-visible processing flags outside documented params"
+    ]
+  },
+  "dependencies": [
+    "k.2"
+  ],
+  "verification_commands": [],
+  "task_timeout_seconds": 900,
+  "model": "openrouter/z-ai/glm-5.2"
+}

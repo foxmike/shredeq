@@ -1,0 +1,62 @@
+{
+  "verification": {
+    "checks": [
+      {
+        "name": "phase_f_dsp_files_exist",
+        "command": [
+          "bash",
+          "-lc",
+          "test -f Source/DSP/PitchDetector.h && test -f Source/DSP/PitchDetector.cpp && test -f Source/DSP/NoteFollower.h && test -f Source/DSP/NoteFollower.cpp && test -f Source/DSP/ParametricBand.h && test -f Source/DSP/ParametricBand.cpp && test -f tests/PitchTrackingTests.cpp"
+        ]
+      },
+      {
+        "name": "cmake_lists_lists_phase_f_sources",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"PitchDetector\\.cpp\" CMakeLists.txt && rg -q \"NoteFollower\\.cpp\" CMakeLists.txt && rg -q \"PitchTrackingTests\\.cpp\" CMakeLists.txt"
+        ]
+      },
+      {
+        "name": "pitch_detector_yin_api_present",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"YIN|yin|d_t|tau|difference\" Source/DSP/PitchDetector.h Source/DSP/PitchDetector.cpp && rg -q \"confidence|TrackingState|tracking\" Source/DSP/PitchDetector.h Source/DSP/PitchDetector.cpp && rg -q \"Fifo|FIFO|AbstractFifo|lock.?free|SPSC|ring\" Source/DSP/PitchDetector.h Source/DSP/PitchDetector.cpp"
+        ]
+      },
+      {
+        "name": "midi_f0_and_priority_present",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"440|69|midi|Midi\" Source/DSP/PitchDetector.h Source/DSP/PitchDetector.cpp Source/DSP/NoteFollower.h Source/DSP/NoteFollower.cpp && rg -q \"Lowest|Highest|Last|priority|Priority\" Source/DSP/PitchDetector.h Source/DSP/PitchDetector.cpp Source/DSP/NoteFollower.h Source/DSP/NoteFollower.cpp"
+        ]
+      },
+      {
+        "name": "note_follower_target_and_smoothing_present",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"f_target|harmonic|cents|1200\" Source/DSP/NoteFollower.h Source/DSP/NoteFollower.cpp && rg -q \"log|ln\\(|exp\\(|ell|smooth\" Source/DSP/NoteFollower.h Source/DSP/NoteFollower.cpp && rg -q \"confidence|hold|home|threshold\" Source/DSP/NoteFollower.h Source/DSP/NoteFollower.cpp"
+        ]
+      },
+      {
+        "name": "parametric_band_note_follower_integration",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"NoteFollower\" Source/DSP/ParametricBand.h Source/DSP/ParametricBand.cpp"
+        ]
+      },
+      {
+        "name": "pitch_tracking_tests_coverage_mentions",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"PitchDetector|NoteFollower|YIN|midi|MIDI|confidence\" tests/PitchTrackingTests.cpp"
+        ]
+      }
+    ]
+  }
+}

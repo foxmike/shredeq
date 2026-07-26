@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "task_id": "l.2",
+  "phase": "L",
+  "phase_id": "l",
+  "title": "Factory preset content refinement",
+  "description": "Refine factory preset JSON content under Resources/Presets/ after phase-K authoring so presets remain categorized, gain-conscious, and load-safe starting points per SHREDEQ_SPEC.md \u00a716 and \u00a722 (factory presets are gain-conscious and categorized).\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- Resources/Presets/PreAmp_TightSixString.json\n- Resources/Presets/Rhythm_ModernCleanup.json\n- Resources/Presets/Lead_SingingFocus.json\n- Resources/Presets/Bass_ClangControl.json\n- Resources/Presets/Diag_FindResonances.json\n- Source/ParameterIDs.h (valid parameter key strings and ranges \u2014 read only)\n- Source/Profiles.h placement/tuning names and indices (read only)\n- Source/StateManager.* factory load expectations / schema_version (read only)\n- .abracapocus/SHREDEQ_SPEC.md \u00a716 Factory Presets and \u00a715 profiles\n\nRefine (do not rename files unless broken; keep the five canonical names):\n1. Ensure every preset has schema_version, name, category (Pre-Amp / Rhythm / Lead / Bass / Diagnostic as appropriate), and placement + tuning references consistent with Profiles.\n2. Parameter maps use ParameterIDs-style keys only; values in legal ranges (freq 20\u201320k where applicable, Q positive finite, gains not stacked to combined extreme boosts).\n3. Gain-conscious: outputGain / makeup / staged boosts restrained (rough unity intent; avoid simultaneous large positive inputGain + multi-band boosts + outputGain > ~+6 dB without compensating cuts). Prefer mild utility settings over clip-marketing curves.\n4. Module enables sensible per category: PreAmp favors Tight Cut restraint; Rhythm mild low-mid cleanup / Chug-friendly defaults; Lead upper-mid polish without harsh +12 dB spikes; Bass clang control without killing fundamental; Diag analyzer/resonance-friendly defaults (not a loud rock preset).\n5. JSON remains valid (parseable); keep meta/comment fields noting gain-conscious design if already present.\n6. Do not add new preset files beyond the five factory set unless fixing a missing canonical file from k.3. No C++ or CMake edits.\n\nverification_commands left empty.",
+  "acceptance_criteria": [
+    "Resources/Presets/PreAmp_TightSixString.json remains valid JSON with Pre-Amp category metadata and schema_version",
+    "Resources/Presets/Rhythm_ModernCleanup.json remains valid JSON with Rhythm category metadata",
+    "Resources/Presets/Lead_SingingFocus.json remains valid JSON with Lead category metadata",
+    "Resources/Presets/Bass_ClangControl.json remains valid JSON with Bass category metadata",
+    "Resources/Presets/Diag_FindResonances.json remains valid JSON with Diagnostic category metadata",
+    "Each refined preset keeps ParameterIDs-style keys, in-range values, placement/tuning refs, and restrained unity-ish output/makeup gain",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "pi_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Resources/Presets/PreAmp_TightSixString.json",
+    "Resources/Presets/Rhythm_ModernCleanup.json",
+    "Resources/Presets/Lead_SingingFocus.json",
+    "Resources/Presets/Bass_ClangControl.json",
+    "Resources/Presets/Diag_FindResonances.json"
+  ],
+  "forbidden_changes": [
+    "modify Source/**",
+    "modify tests/**",
+    "modify CMakeLists.txt or CMakePresets.json",
+    "modify scripts/**",
+    "modify docs/**",
+    "add extreme gain stacks or marketing demo presets",
+    "change preset file format to binary or BinaryData codegen"
+  ],
+  "allowed_symbols": [],
+  "decision_budget": {
+    "allowed": [
+      "tune parameter values and metadata inside the five factory JSON presets",
+      "align category/profile fields with Profiles catalog names",
+      "restore missing schema_version or ParameterIDs keys if incomplete"
+    ],
+    "forbidden": [
+      "create C++ loader changes",
+      "rename the five canonical preset basenames without need",
+      "add dozens of extra factory presets",
+      "introduce online/downloadable preset dependency"
+    ]
+  },
+  "dependencies": [],
+  "task_timeout_seconds": 900,
+  "verification_commands": [],
+  "model": "openrouter/google/gemma-4-31b-it"
+}

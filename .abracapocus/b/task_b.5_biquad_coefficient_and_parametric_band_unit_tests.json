@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "task_id": "b.5",
+  "phase": "B",
+  "phase_id": "b",
+  "title": "Biquad coefficient and parametric band unit tests",
+  "description": "Add juce::UnitTest coverage for coefficient design and parametric band behavior. Prefer registering sources in CMake only if b.4 already uses explicit lists\u2014this task may append tests/BiquadTests.cpp and tests/ParametricBandTests.cpp to the ShredEQUnitTests target if required for linkage; if CMake edit is necessary, keep the change limited to those two test files in the unit-test target.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- Source/DSP/BiquadCoefficients.*\n- Source/DSP/ParametricBand.*\n- Source/DSP/TPTFilter.* (smoke if handy)\n- tests/TestMain.cpp unit-test runner pattern\n- CMakeLists.txt ShredEQUnitTests target_sources as left by b.4\n- .abracapocus/SHREDEQ_SPEC.md \u00a7 testing notes: static magnitude \u00b10.1 dB through operating range with documented Nyquist exceptions; multi-rate checks\n\nImplement:\n1. tests/BiquadTests.cpp \u2014 juce::UnitTest suite:\n   - slope cascade section counts for 6/12/18/24/36/48 dB/oct\n   - peak/bell designed at known f0/G/Q: magnitude near f0 within \u00b10.1 dB of requested gain at 48 kHz (away from Nyquist)\n   - LP/HP sanity (attenuation above/below cutoff directionally correct)\n   - evaluate near Nyquist at 48 kHz and 96 kHz and record/assert only what the digital design guarantees (no false analog-match claims)\n2. tests/ParametricBandTests.cpp \u2014 juce::UnitTest suite:\n   - 12-band container construct/prepare/reset\n   - bypassed/disabled band is unity (impulse or DC/pink check within tight tolerance)\n   - linked dual-mono process runs without allocating (can smoke process a small buffer)\n   - routing mode left vs right does not apply filter energy to the opposite channel for a mono-impulse-on-one-channel case\n   - assert absence of M/S matrix symbols/encoding by behavioral check (mid-only mode does not rotate L/R into synthetic stereo when fed mid-domain buffer treated as channel 0/1 per API docs)\n3. CMakeLists.txt \u2014 only if unit-test target will not otherwise compile the new tests: append tests/BiquadTests.cpp and tests/ParametricBandTests.cpp to ShredEQUnitTests sources.\n\nDo NOT rewrite DSP production logic except for minimal testability hooks if absolutely required and already permitted paths; prefer testing public APIs.",
+  "acceptance_criteria": [
+    "tests/BiquadTests.cpp exists and registers juce::UnitTest coverage for RBJ designs and slope section counts",
+    "tests/ParametricBandTests.cpp exists and registers juce::UnitTest coverage for 12-band prepare/process/bypass and routing channel masking",
+    "BiquadTests include a \u00b10.1 dB (or documented tolerance) magnitude check at band center for a peaking filter away from Nyquist",
+    "CMakeLists.txt ShredEQUnitTests target includes tests/BiquadTests.cpp and tests/ParametricBandTests.cpp when source lists are explicit",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "pi_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "tests/BiquadTests.cpp",
+    "tests/ParametricBandTests.cpp",
+    "CMakeLists.txt"
+  ],
+  "forbidden_changes": [
+    "modify Source/DSP/BiquadCoefficients.*",
+    "modify Source/DSP/TPTFilter.*",
+    "modify Source/DSP/ParametricBand.*",
+    "modify Source/DSP/ResponseComputer.*",
+    "modify Source/PluginProcessor.* or Source/PluginEditor.*",
+    "modify CMakePresets.json",
+    "add Catch2/GoogleTest/third-party test frameworks",
+    "broad CMake refactors beyond appending the two test sources to ShredEQUnitTests"
+  ],
+  "allowed_symbols": [
+    "BiquadTests",
+    "ParametricBandTests",
+    "runTest"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "juce::UnitTest subclasses in anonymous or free functions",
+      "analytical magnitude via BiquadCoefficients helpers",
+      "append only the two new test cpp files to unit-test target_sources",
+      "document Nyquist exception tolerances in test expect messages"
+    ],
+    "forbidden": [
+      "reimplement coefficient math inside tests instead of calling production API",
+      "change plugin manufacturer metadata",
+      "modify production DSP algos to force green tests without necessity"
+    ]
+  },
+  "dependencies": [
+    "b.1",
+    "b.2",
+    "b.3",
+    "b.4"
+  ],
+  "task_timeout_seconds": 900,
+  "verification_commands": [],
+  "model": "openrouter/z-ai/glm-5.2"
+}

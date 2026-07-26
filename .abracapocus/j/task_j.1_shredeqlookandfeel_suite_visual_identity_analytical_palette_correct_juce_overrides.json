@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "task_id": "j.1",
+  "phase": "J",
+  "phase_id": "j",
+  "title": "ShredEQLookAndFeel \u2014 suite visual identity, analytical palette, correct JUCE overrides",
+  "description": "Implement ShredEQLookAndFeel as the suite visual identity for the diagnostic EQ GUI per SHREDEQ_SPEC.md \u00a713.9 and known JUCE LookAndFeel_V4 override rules.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a713.1 window behavior, \u00a713.9 visual appearance (analytical, darker/more measurement-oriented than boost/space plugins)\n- any existing Source/PluginEditor.* skeleton from phase A for default sizing hooks\n- JUCE LookAndFeel_V4 headers for drawPopupMenuItem, drawRotarySlider, drawLinearSlider, drawComboBox, drawButtonBackground, drawToggleButton, getTypefaceForFont\n- sibling suite LookAndFeel patterns under /home/mike/dev/mike/music/plugins/ if present (palette restraint; do not copy non-analytical neon aesthetics)\n\nImplement Source/UI/ShredEQLookAndFeel.h and Source/UI/ShredEQLookAndFeel.cpp:\n1. class ShredEQLookAndFeel : public juce::LookAndFeel_V4.\n2. Analytical dark-neutral palette: deep background, restrained luminous accent for meters/analysis, high-contrast response-curve colours reserved as public Colour constants for Stage A / adaptive layer / Stage B, colour-blind-safe routing indicator colours, muted text secondary colour.\n3. Correct LookAndFeel_V4 overrides using the modern individual-parameter signatures \u2014 especially drawPopupMenuItem with discrete parameters (isSeparator, isActive, isHighlighted, text, shortcutKeyText, iconToDraw, isTicked) \u2014 NOT the obsolete PopupMenu::Item API overload.\n4. Override common controls used by inspector/header: rotary/linear sliders, combo boxes, text buttons, toggle buttons, labels, scrollbars, popup menus, tooltip window style. Keep animations minimal \u2014 only where executing code communication is later needed; no decorative motion.\n5. Expose named Colour getters or public static Colour members for workspace consumers (background, panel, grid, stageA, adaptive, stageB, selection, bypass, danger/audition).\n6. Optional default Typeface setup if suite font assets are unavailable \u2014 fall back to LookAndFeel_V4 defaults without crashing.\n\nDo not implement EQWorkspace, BandNode, InspectorPanel, IntelligenceDrawer, PluginEditor assembly, or CMakeLists.txt.",
+  "acceptance_criteria": [
+    "Source/UI/ShredEQLookAndFeel.h and Source/UI/ShredEQLookAndFeel.cpp exist",
+    "ShredEQLookAndFeel subclasses juce::LookAndFeel_V4",
+    "drawPopupMenuItem uses the individual-parameter LookAndFeel_V4 signature and does not use PopupMenu::Item API",
+    "LookAndFeel exposes named analytical palette colours including distinct Stage A / adaptive / Stage B response colours",
+    "Slider, ComboBox, TextButton/ToggleButton, and popup menu drawing overrides are present",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "antigravity_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/UI/ShredEQLookAndFeel.h",
+    "Source/UI/ShredEQLookAndFeel.cpp"
+  ],
+  "forbidden_changes": [
+    "modify Source/PluginEditor.*",
+    "modify CMakeLists.txt or CMakePresets.json",
+    "modify Source/PluginProcessor.*",
+    "implement EQWorkspace, BandNode, InspectorPanel, or IntelligenceDrawer",
+    "use obsolete PopupMenu::Item drawPopupMenuItem overload",
+    "add third-party dependencies or binary font packs outside allowed paths",
+    "implement DSP or analyzer algorithms"
+  ],
+  "allowed_symbols": [
+    "ShredEQLookAndFeel",
+    "drawPopupMenuItem",
+    "drawRotarySlider",
+    "drawLinearSlider",
+    "drawComboBox",
+    "drawButtonBackground",
+    "drawToggleButton",
+    "colourStageA",
+    "colourAdaptive",
+    "colourStageB",
+    "colourBackground",
+    "colourPanel",
+    "colourGrid"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "LookAndFeel_V4 subclass with modern override signatures",
+      "public Colour constants / getters for suite analytical palette",
+      "fallback default typeface when custom fonts absent"
+    ],
+    "forbidden": [
+      "full editor layout ownership",
+      "CMake registration",
+      "PopupMenu::Item-based drawPopupMenuItem",
+      "decorative non-communicative animation systems"
+    ]
+  },
+  "dependencies": [],
+  "verification_commands": [],
+  "task_timeout_seconds": 900
+}

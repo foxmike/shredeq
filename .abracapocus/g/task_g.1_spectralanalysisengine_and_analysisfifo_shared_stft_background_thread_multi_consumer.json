@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "task_id": "g.1",
+  "phase": "G",
+  "phase_id": "g",
+  "title": "SpectralAnalysisEngine and AnalysisFifo \u2014 shared STFT, background thread, multi-consumer",
+  "description": "Implement the SINGLE shared spectral analysis subsystem: AnalysisFifo plus SpectralAnalysisEngine with Hann-window STFT, configurable FFT size/hop, background worker thread, multi-consumer read APIs, overload skip-frames, and fixed memory bounds per SHREDEQ_SPEC.md \u00a78.2 and \u00a718.3.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a78.2 (STFT Hann frame, S_t[k] = 20*log10(|X|+eps), local baseline / excess prep inputs)\n- .abracapocus/SHREDEQ_SPEC.md \u00a712.1\u201312.4 (instant spectrum, percentile cloud, persistence map \u2014 later consumers of this engine; design multi-consumer snapshots now)\n- .abracapocus/SHREDEQ_SPEC.md \u00a718.1 and \u00a718.3 (audio-thread rules; AbstractFifo; skip frames when overloaded; fixed memory; stop heavy work when disabled)\n- Source/DSP/PitchDetector.* FIFO / control-rate thread patterns from phase F (read only; do not rewrite pitch)\n- Sibling DSP modules under Source/DSP/* and any existing Source/Analysis/* for prepare/reset style (read only)\n- CMakeLists.txt (read only; g.3 owns CMake registration)\n\nImplement Source/Analysis/AnalysisFifo.h and Source/Analysis/AnalysisFifo.cpp:\n1. Fixed-capacity SPSC (or multi-producer-safe only if documented) audio ring using juce::AbstractFifo or equivalent.\n2. prepare(capacitySamples, numChannels) allocates once; push from audio thread copies interleaved or planar frames without heap; pop/read for analysis thread advances read pointer without blocking the audio producer.\n3. Overrun policy: drop oldest or newest frames (document choice) \u2014 never block or allocate; expose dropped-frame counters atomically for diagnostics.\n4. Channel layout: at least mono downmix helper and stereo L/R storage hooks for pre-EQ / optional sidechain tap capacity (storage only; wiring later).\n\nImplement Source/Analysis/SpectralAnalysisEngine.h and Source/Analysis/SpectralAnalysisEngine.cpp:\n1. SpectralAnalysisEngine is the sole STFT owner for resonance detector, future percentile cloud, spectrum display, persistence map, and sidechain collision analysis. Document multi-consumer snapshot contracts in the header.\n2. prepare(sampleRate, maxBlockSize, fftOrderOrSize): preallocate Hann window, FFT (juce::dsp::FFT or equivalent project style), magnitude/log-magnitude working buffers, hop accumulator. No FFT planning / allocation on the audio path thereafter.\n3. STFT per \u00a78.2: X_t[k] via windowed hop; S_t[k] = 20*log10(|X_t[k]| + epsilon). Configurable FFT size and hop at prepare (or setConfig applied off audio thread with bounded double-buffer if needed).\n4. Background thread (juce::Thread / TimeSliceClient owned by the engine): pull from AnalysisFifo, compute frames; when overloaded, skip frames rather than stall audio; when setEnabled(false) or consumers idle, idle the worker with near-zero CPU.\n5. Audio-thread API: pushAudio(const float* const* channels, int numChannels, int numSamples) \u2014 copy only into FIFO; no mutex waits, no FFT, no heap.\n6. Multi-consumer read API: lock-free or briefly consistent snapshot of latest magnitude / log-magnitude spectrum, frame timestamp/sequence, FFT size, sample rate, bin-to-Hz helper. Snapshot must be safe for a control/GUI/analysis consumer without blocking processBlock.\n7. Fixed memory bounds: no unbounded history in this task (history windows belong to later analyzer phases). Optional small latest-N ring only if capacity is fixed at prepare and documented.\n8. Numerical guards: epsilon floors, finite checks on magnitudes, valid Nyquist bin counts after sample-rate changes (re-prepare path).\n9. No ResonanceDetector, ResonanceSuppressor, PluginProcessor wiring, tests, or CMakeLists changes in this task.\n\nC++20/JUCE style consistent with Source/. verification_commands left empty \u2014 C++ adapter infers cmake/ctest.",
+  "acceptance_criteria": [
+    "Source/Analysis/AnalysisFifo.h, Source/Analysis/AnalysisFifo.cpp, Source/Analysis/SpectralAnalysisEngine.h, and Source/Analysis/SpectralAnalysisEngine.cpp exist",
+    "AnalysisFifo uses fixed-capacity juce::AbstractFifo (or equivalent) with audio-thread push that never heap-allocates or blocks",
+    "SpectralAnalysisEngine computes Hann-window STFT and S_t[k] = 20*log10(|X|+eps) with configurable FFT size and hop per SHREDEQ_SPEC.md \u00a78.2",
+    "Background worker pulls FIFO frames and skips frames when overloaded; disabled/idle path stops expensive FFT work per \u00a718.3",
+    "Multi-consumer snapshot API exposes latest spectrum (magnitude or log-magnitude), sequence/timestamp, and bin frequency mapping without audio-thread locks",
+    "Memory for FFT/window/fifos is bounded at prepare; no unbounded spectral history",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "codex_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/Analysis/SpectralAnalysisEngine.h",
+    "Source/Analysis/SpectralAnalysisEngine.cpp",
+    "Source/Analysis/AnalysisFifo.h",
+    "Source/Analysis/AnalysisFifo.cpp"
+  ],
+  "forbidden_changes": [
+    "modify CMakeLists.txt or CMakePresets.json",
+    "modify Source/DSP/ResonanceDetector.*",
+    "modify Source/DSP/ResonanceSuppressor.*",
+    "modify Source/DSP/PitchDetector.*",
+    "modify Source/PluginProcessor.* or Source/PluginEditor.*",
+    "modify Source/ParameterIDs.h",
+    "modify tests/**",
+    "add third-party FFT libraries as new dependencies",
+    "implement resonance candidate scoring or suppressor notches",
+    "wire processBlock ownership of the analyzer thread from PluginProcessor"
+  ],
+  "allowed_symbols": [
+    "AnalysisFifo",
+    "SpectralAnalysisEngine",
+    "prepare",
+    "reset",
+    "pushAudio",
+    "setEnabled",
+    "setFftSize",
+    "setHopSize",
+    "getLatestSpectrum",
+    "getSpectrumSnapshot",
+    "getBinFrequencyHz",
+    "getSequence",
+    "getDroppedFrames",
+    "binToHz"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "juce::AbstractFifo + fixed float storage for AnalysisFifo",
+      "juce::dsp::FFT with precomputed Hann window",
+      "engine-owned juce::Thread or TimeSliceClient for STFT worker",
+      "lock-free double-buffered spectrum snapshot for multi-consumer reads",
+      "mono downmix of multi-channel push for primary analysis path"
+    ],
+    "forbidden": [
+      "own CMakeLists.txt target_sources",
+      "ResonanceDetector or ResonanceSuppressor implementation",
+      "PluginProcessor processBlock wiring",
+      "unbounded spectrogram history buffers",
+      "third-party FFT dependency"
+    ]
+  },
+  "dependencies": [],
+  "verification_commands": [],
+  "task_timeout_seconds": 900
+}

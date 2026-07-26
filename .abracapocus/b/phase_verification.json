@@ -1,0 +1,46 @@
+{
+  "verification": {
+    "checks": [
+      {
+        "name": "phase_b_dsp_files_exist",
+        "command": [
+          "bash",
+          "-lc",
+          "test -f Source/DSP/BiquadCoefficients.h && test -f Source/DSP/BiquadCoefficients.cpp && test -f Source/DSP/TPTFilter.h && test -f Source/DSP/TPTFilter.cpp && test -f Source/DSP/ParametricBand.h && test -f Source/DSP/ParametricBand.cpp && test -f Source/DSP/ResponseComputer.h && test -f Source/DSP/ResponseComputer.cpp && test -f tests/BiquadTests.cpp && test -f tests/ParametricBandTests.cpp"
+        ]
+      },
+      {
+        "name": "cmake_lists_lists_phase_b_sources",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"BiquadCoefficients\\.cpp\" CMakeLists.txt && rg -q \"TPTFilter\\.cpp\" CMakeLists.txt && rg -q \"ParametricBand\\.cpp\" CMakeLists.txt && rg -q \"ResponseComputer\\.cpp\" CMakeLists.txt && rg -q \"BiquadTests\\.cpp\" CMakeLists.txt && rg -q \"ParametricBandTests\\.cpp\" CMakeLists.txt"
+        ]
+      },
+      {
+        "name": "no_per_band_ms_encode_claim",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -n \"M/S|mid.side|encode\" Source/DSP/ParametricBand.h Source/DSP/ParametricBand.cpp || true; rg -q \"do NOT|does not|without.*M/S|no per-band M/S|routing mode|StereoRouting\" Source/DSP/ParametricBand.h Source/DSP/ParametricBand.cpp"
+        ]
+      },
+      {
+        "name": "slope_section_mentions",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"48|36|24|18|12|6\" Source/DSP/BiquadCoefficients.h Source/DSP/BiquadCoefficients.cpp && rg -q \"first.?order|FirstOrder|biquad|Biquad\" Source/DSP/BiquadCoefficients.h Source/DSP/BiquadCoefficients.cpp"
+        ]
+      },
+      {
+        "name": "cmake_configure_only",
+        "command": [
+          "bash",
+          "-lc",
+          "cmake -S . -B build/phase-b-configure -DSHREDEQ_CONFIGURE_ONLY=ON"
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "task_id": "k.5",
+  "phase": "K",
+  "phase_id": "k",
+  "title": "State, A/B, preset, and profile tests",
+  "description": "Add juce::UnitTest coverage for StateManager A/B + gain-match, Profiles catalogs, factory preset load shape, and (where testable without a full host) delta-audition mode switching per SHREDEQ_SPEC.md \u00a714\u201316 and \u00a721.8.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- Source/StateManager.* A/B, XML schema, gain-match APIs from k.1\n- Source/Profiles.* placement/tuning catalogs from k.2\n- Resources/Presets/*.json from k.3\n- Source/PluginProcessor.* delta audition / StateManager integration from k.4 (call only public testable APIs)\n- tests/TestMain.cpp and existing tests/*Tests.cpp patterns\n- CMakeLists.txt as left by k.4 (tests/StateTests.cpp should already be listed \u2014 do not edit CMake unless entry missing, and CMake is not in allowed paths)\n\nImplement tests/StateTests.cpp:\n1. A/B: capture distinct parameter snapshots into A and B; switch applies the correct slot; copyAtoB makes B match A; resetSlot restores defaults or empty without crash; serialized state restores both slots and active index after load.\n2. schema_version: refuse newer unsupported versions (or migrations documented); accept current version.\n3. Gain-match: prepare meter; feed known level relationship (e.g. wet quieter than dry by fixed dB via synthetic levels API or processMatchLevels) \u2192 G_match sign/magnitude moves the correct direction within tolerance; freeze stops further updates; G_match remains bounded.\n4. Profiles: listPlacementProfiles count \u22657 and includes Pre-Amp / Rhythm / Lead / Bass names; listTuningProfiles includes E Standard and at least one Drop and one bass tuning; get by index stable; custom tuning setters keep finite pitches.\n5. Factory presets: each of the five phase-K JSON files exists on disk under Resources/Presets/ (or via BinaryData if k.4 embedded them); parse/load path does not throw; category/name metadata present; outputGain or equivalent makeup not wildly exceed e.g. \u00b112 dB if present.\n6. Delta audition (if processor constructible in unit tests): setDeltaAuditionMode cycles Offline modes without crash; Off is safe default. Skip heavy audio graph asserts if headless construct is incomplete \u2014 document.\n7. Use juce::UnitTest; no new third-party test frameworks. Do not rewrite production code solely to force green tests.\n\nverification_commands left empty \u2014 C++ adapter infers cmake/ctest.",
+  "acceptance_criteria": [
+    "tests/StateTests.cpp exists and registers juce::UnitTest coverage for StateManager A/B, gain-match, Profiles, and factory presets",
+    "A/B tests assert capture/apply/switch/copy and XML restore of both slots with schema_version handling",
+    "Gain-match tests assert directional G_match, freeze behavior, and bounded trim",
+    "Profiles tests assert \u00a715.1 placement coverage and \u00a715.2 factory tunings including E Standard",
+    "Factory preset tests cover the five Resources/Presets JSON files named in phase K with category metadata",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "pi_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "tests/StateTests.cpp"
+  ],
+  "forbidden_changes": [
+    "modify Source/** production code except if strictly unreachable without a one-line friend \u2014 prefer no Source edits",
+    "modify CMakeLists.txt",
+    "modify Resources/Presets/**",
+    "add third-party test frameworks",
+    "rewrite DSP modules"
+  ],
+  "allowed_symbols": [
+    "StateTests",
+    "StateManager",
+    "ProfileCatalog",
+    "GainMatchMeter",
+    "DeltaAuditionMode"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "juce::UnitTest cases with floating tolerances",
+      "filesystem or BinaryData load of factory presets",
+      "headless processor construction when already supported by test harness"
+    ],
+    "forbidden": [
+      "golden-file audio sample dumps as sole acceptance",
+      "network or host DAW automation requirements"
+    ]
+  },
+  "dependencies": [
+    "k.1",
+    "k.2",
+    "k.3",
+    "k.4"
+  ],
+  "verification_commands": [],
+  "task_timeout_seconds": 900,
+  "model": "openrouter/z-ai/glm-5.2"
+}

@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "task_id": "d.1",
+  "phase": "D",
+  "phase_id": "d",
+  "title": "TightCut \u2014 resonant HPF, linked punch bell, listen-to-removed, routing",
+  "description": "Implement Tight Cut DSP: resonant high-pass with linked punch bell, listen-to-removed-low-end mode, and stereo/mid/side routing per SHREDEQ_SPEC.md \u00a76.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a76.1\u20136.3 (architecture, controls, punch linkage)\n- Source/DSP/BiquadCoefficients.h/.cpp (HP cascade slopes, bell coeffs \u2014 read only)\n- Source/DSP/TPTFilter.h/.cpp and Source/DSP/ParametricBand.* patterns for prepare/reset/process style (read only)\n- Source/ParameterIDs.h tightCut_* IDs if present (read only; do not edit)\n\nImplement Source/DSP/TightCut.h and Source/DSP/TightCut.cpp:\n1. TightCut class with prepare(sampleRate, maxBlockSize), reset(), and process(float* const* channels, numChannels, numSamples) or equivalent juce::AudioBuffer view \u2014 no heap in process.\n2. Signal path: Input \u2192 resonant HPF \u2192 linked punch bell \u2192 Output. Cutoff 25\u2013220 Hz; slope 12/18/24/36 dB/oct via cascaded sections reused from BiquadCoefficients (or equivalent SOS state); HPF resonance Q 0.5\u20132.5.\n3. Punch bell: f_p = r * f_c with r \u2208 [0.75, 1.5]; punch gain 0 to +8 dB; punch Q 0.35\u20133.0. Linked mode moves punch with cutoff; unlinked allows independent punch frequency setter.\n4. Pre/post placement flag is a data field only (processor owns final order); expose setPlacement/getPlacement for wiring without owning the graph.\n5. Routing: stereo / mid / side channel masking only \u2014 no energy-normalized M/S encode/decode ownership here (apply on mid or side legs when route requests it using temporary mid/side if already a project pattern; otherwise document mid= (L+R)/2 style consistent with existing DSP).\n6. Listen-to-removed-low-end mode: when enabled, output the content rejected by the HPF (dry \u2212 highpassed, or complementary LP path) so the user can audition removed lows; dry path must remain click-free when toggling.\n7. Parameter setters/smoothers for cutoff, slope, resonance, punch ratio/freq, punch gain, punch Q, enable, listen, routing. Clamp to spec ranges. Coefficient updates must be zipper-safe (smooth freq/gain or crossfade).\n8. Optional lightweight getters for GUI (cutoff, effective punch freq, enabled, listen active).\n\nDo NOT edit PluginProcessor, CMakeLists.txt, ChugStabilizer, or tests.",
+  "acceptance_criteria": [
+    "Source/DSP/TightCut.h and Source/DSP/TightCut.cpp exist",
+    "TightCut implements resonant HPF plus punch bell with f_p = r * f_c linkage and independent unlinked punch frequency",
+    "Slope supports 12, 18, 24, and 36 dB/oct; cutoff clamp 25\u2013220 Hz; HPF Q 0.5\u20132.5; punch gain 0\u2013+8 dB; punch Q 0.35\u20133.0",
+    "Listen-to-removed-low-end mode exposes the rejected low band instead of the filtered main path",
+    "Stereo/mid/side routing is channel-leg selection only without owning stage-level M/S encode redesign",
+    "No heap allocation in per-sample or per-block process paths",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "codex_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/DSP/TightCut.h",
+    "Source/DSP/TightCut.cpp"
+  ],
+  "forbidden_changes": [
+    "modify CMakeLists.txt or CMakePresets.json",
+    "modify Source/DSP/ChugStabilizer.*",
+    "modify Source/DSP/BiquadCoefficients.* or Source/DSP/TPTFilter.* beyond include/use",
+    "modify Source/PluginProcessor.* or Source/PluginEditor.*",
+    "modify Source/ParameterIDs.h",
+    "modify tests/**",
+    "add third-party dependencies",
+    "implement Chug Stabilizer or parametric Stage A"
+  ],
+  "allowed_symbols": [
+    "TightCut",
+    "prepare",
+    "reset",
+    "process",
+    "setEnabled",
+    "setCutoffHz",
+    "setSlopeDbPerOct",
+    "setResonanceQ",
+    "setPunchRatio",
+    "setPunchFrequencyHz",
+    "setPunchGainDb",
+    "setPunchQ",
+    "setLinked",
+    "setPlacement",
+    "setRouting",
+    "setListenRemoved",
+    "getEffectivePunchFrequencyHz"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "reuse BiquadCoefficients cascade builders for HPF slopes and RBJ bell for punch",
+      "float buffer API matching sibling DSP modules",
+      "DF1/TPT section state owned inside TightCut",
+      "placement as enum/data for processor fan-in"
+    ],
+    "forbidden": [
+      "own CMakeLists.txt target_sources",
+      "wire PluginProcessor processBlock",
+      "implement ChugStabilizer",
+      "GUI paint or APVTS layout ownership"
+    ]
+  },
+  "dependencies": [],
+  "task_timeout_seconds": 900,
+  "verification_commands": []
+}

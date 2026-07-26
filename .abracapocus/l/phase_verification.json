@@ -1,0 +1,38 @@
+{
+  "verification": {
+    "checks": [
+      {
+        "name": "phase_l_files_exist",
+        "command": [
+          "bash",
+          "-lc",
+          "test -f scripts/validate.sh && test -f docs/verification/shredeq_release.md && test -f docs/verification/shredeq_phase_summary.md && test -f Resources/Presets/PreAmp_TightSixString.json && test -f Resources/Presets/Rhythm_ModernCleanup.json && test -f Resources/Presets/Lead_SingingFocus.json && test -f Resources/Presets/Bass_ClangControl.json && test -f Resources/Presets/Diag_FindResonances.json"
+        ]
+      },
+      {
+        "name": "validate_script_structure",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"set -euo pipefail\" scripts/validate.sh && rg -q \"cmake|ctest\" scripts/validate.sh && rg -q \"latency|getLatencySamples|zero\" scripts/validate.sh && rg -q \"processBlock|malloc|mutex|RT|audio.thread|lock\" scripts/validate.sh"
+        ]
+      },
+      {
+        "name": "factory_presets_still_categorized",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"schema_version|category|Category\" Resources/Presets/PreAmp_TightSixString.json Resources/Presets/Rhythm_ModernCleanup.json Resources/Presets/Lead_SingingFocus.json Resources/Presets/Bass_ClangControl.json Resources/Presets/Diag_FindResonances.json"
+        ]
+      },
+      {
+        "name": "release_docs_section_22_honesty",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"MANUAL|manual|pluginval|REAPER|Bitwig\" docs/verification/shredeq_release.md && rg -q \"validate\\.sh|ctest|Release\" docs/verification/shredeq_release.md && rg -q \"\u00a722|Release Criteria|zero-latency|bypass|sidechain\" docs/verification/shredeq_release.md && rg -q \"Phase [A-L]|phase [A-L]|Validation\" docs/verification/shredeq_phase_summary.md"
+        ]
+      }
+    ]
+  }
+}

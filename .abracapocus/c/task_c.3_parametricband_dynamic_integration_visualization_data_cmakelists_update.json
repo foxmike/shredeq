@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "task_id": "c.3",
+  "phase": "C",
+  "phase_id": "c",
+  "title": "ParametricBand dynamic integration, visualization data, CMakeLists update",
+  "description": "Integrate DynamicProcessor into ParametricBand so each band can run static or dynamic EQ, expose dynamic visualization data for the GUI, and register phase-C sources in CMakeLists.txt. This task is the sole CMakeLists.txt owner for phase C.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- Source/DSP/ParametricBand.h/.cpp (phase B static band engine)\n- Source/DSP/DynamicProcessor.h/.cpp and EnvelopeFollower.h/.cpp\n- CMakeLists.txt target_sources patterns from phase B\n- .abracapocus/SHREDEQ_SPEC.md \u00a74.1\u20134.5 and \u00a73 (band still does not own M/S encode)\n\nImplement integration in Source/DSP/ParametricBand.h/.cpp:\n1. Each ParametricBand owns or embeds a DynamicProcessor (or optional unique composition) with setters forwarding mode, detector source, threshold/ratio/knee/range, attack/release, and enable-dynamics flag. Static mode remains default and must match prior static behavior when dynamics disabled or mode==staticEq.\n2. process() path: build DetectorContext from available channel taps / external SC buffer pointers passed into process (extend process signature only as needed; document ownership). Apply DynamicProcessor gain to the band\u2019s EQ contribution (scale effective gain dB or post-filter makeup) per-sample or per-block with existing smoothers; still no per-band M/S encode/decode.\n3. Expose getDynamicVisualizationData() (or band-level getters) for GUI: static curve params already available + dynamic fields from DynamicProcessor.\n4. 12-band container (ParametricEQ) prepare/reset propagates to each band\u2019s DynamicProcessor. No heap in process.\n5. CMakeLists.txt: add Source/DSP/EnvelopeFollower.cpp, Source/DSP/DynamicProcessor.cpp, and tests/DynamicEQTests.cpp to the appropriate plugin/DSP and ShredEQUnitTests source lists using the same style as existing entries. Do not refactor unrelated targets.\n\nDo NOT implement unit test bodies (c.4), PluginProcessor processBlock final wiring beyond what ParametricBand API needs, or GUI paint code.",
+  "acceptance_criteria": [
+    "Source/DSP/ParametricBand.h/.cpp integrate DynamicProcessor with per-band mode/detector/threshold controls",
+    "When dynamics disabled or mode is staticEq, band behavior remains static EQ equivalent to prior static path",
+    "ParametricBand exposes dynamic visualization data suitable for GUI (threshold, detector level, GR/current gain, reaction flags)",
+    "Stereo routing remains channel masking only \u2014 no per-band M/S encode/decode added",
+    "CMakeLists.txt lists Source/DSP/EnvelopeFollower.cpp, Source/DSP/DynamicProcessor.cpp, and tests/DynamicEQTests.cpp on the correct targets",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "antigravity_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/DSP/ParametricBand.h",
+    "Source/DSP/ParametricBand.cpp",
+    "CMakeLists.txt"
+  ],
+  "forbidden_changes": [
+    "modify Source/DSP/EnvelopeFollower.*",
+    "modify Source/DSP/DynamicProcessor.* beyond includes/usage from ParametricBand",
+    "rewrite BiquadCoefficients or TPTFilter implementations",
+    "modify tests/DynamicEQTests.cpp body (c.4 owns the test file content)",
+    "modify Source/PluginProcessor.* or Source/PluginEditor.*",
+    "modify CMakePresets.json",
+    "add third-party dependencies",
+    "implement energy-normalized M/S encode/decode inside ParametricBand"
+  ],
+  "allowed_symbols": [
+    "ParametricBand",
+    "ParametricEQ",
+    "DynamicProcessor",
+    "DynamicVisualizationData",
+    "setDynamicMode",
+    "setDetectorSource",
+    "setDynamicsEnabled",
+    "getDynamicVisualizationData",
+    "prepare",
+    "reset",
+    "process"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "embed DynamicProcessor by value inside ParametricBand",
+      "extend process signature with optional DetectorContext or SC pointers",
+      "scale static gain dB by dynamic modulation before coefficient update or after filter",
+      "append phase-C sources to existing CMake lists only"
+    ],
+    "forbidden": [
+      "four-zone multiband engine",
+      "PluginEditor view modes",
+      "broad CMake restructure",
+      "heap allocate per block in process"
+    ]
+  },
+  "dependencies": [
+    "c.2"
+  ],
+  "task_timeout_seconds": 900,
+  "verification_commands": []
+}

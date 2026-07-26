@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "task_id": "l.3",
+  "phase": "L",
+  "phase_id": "l",
+  "title": "Release documentation and verification checklist",
+  "description": "Author release verification documentation that maps SHREDEQ_SPEC.md \u00a721\u2013\u00a722 to automated vs manual checks, and summarize what phase L (and prior phases) cover in CI versus what requires host validation.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- scripts/validate.sh from l.1 (what is actually automated)\n- .abracapocus/SHREDEQ_SPEC.md \u00a721 Testing (21.1\u201321.10) and \u00a722 Release Criteria\n- .abracapocus/SHREDEQ_SPEC.md \u00a718\u2013\u00a719 RT and latency requirements\n- tests/*Tests.cpp inventory and phase skeletons A\u2013K deliverables\n- CMakePresets.json / scripts/build_all.sh for documented build commands\n\nCreate docs/verification/shredeq_release.md:\n1. Title and purpose: ShredEQ v1.0 release verification checklist.\n2. How to run automated gates: scripts/validate.sh; cmake Release build; ctest; note Linux-first CI expectation.\n3. Checklist table or sections mirroring every \u00a722 bullet, each tagged:\n   - VERIFIED_IN_CI / AUTOMATED (script or unit test)\n   - PARTIAL (source/static or unit-level only)\n   - MANUAL_REQUIRED (host/DAW/pluginval/Windows)\n4. Expand \u00a721.1\u201321.10 into the same honesty model: filter response, stability, dynamic EQ, multiband, Chug, resonance, pitch, state, host validation (Bitwig Linux, REAPER Linux/Windows, pluginval, standalone), audio regression.\n5. Explicitly document that external sidechain, mono/stereo host layouts, offline render, project reopen-in-host, GUI DPI/resize, and Windows Release builds cannot be claimed CI-green solely from scripts/validate.sh unless those tools are integrated \u2014 list manual procedure stubs.\n6. Zero-latency / reported latency: state default mode reports 0; lookahead modes report non-zero with PDC when enabled.\n7. Bypass click-free and A/B/gain-match: point to automated symbols/tests vs ear/host checks.\n8. Factory presets: categorized + gain-conscious criteria and path Resources/Presets/.\n9. Sign-off template: operator initials / date / git SHA fields (empty placeholders).\n\nCreate docs/verification/shredeq_phase_summary.md:\n1. One section per implementation phase A\u2013L with: focus, key deliverables, primary tests/artifacts.\n2. Call out fan-in ownership pattern (CMakeLists / Processor / Editor) briefly.\n3. State overall maturity: what ship blockers remain if only CI has run.\n4. Link/relative-path reference to shredeq_release.md and scripts/validate.sh.\n\nDo not modify Source, CMake, presets, or the validation script. Be honest \u2014 never mark host-only items as CI-verified.\n\nverification_commands left empty.",
+  "acceptance_criteria": [
+    "docs/verification/shredeq_release.md exists and maps SHREDEQ_SPEC.md \u00a722 release criteria with VERIFIED_IN_CI/PARTIAL/MANUAL_REQUIRED tags",
+    "docs/verification/shredeq_release.md documents how to run scripts/validate.sh and ctest/Release build",
+    "docs/verification/shredeq_release.md explicitly lists host tests (Bitwig, REAPER, pluginval, sidechain, Windows) as manual when not CI-runnable",
+    "docs/verification/shredeq_phase_summary.md exists summarizing phases A\u2013L deliverables and residual ship risks",
+    "Release docs do not claim DAW/host verification passed without evidence",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "pi_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "docs/verification/shredeq_release.md",
+    "docs/verification/shredeq_phase_summary.md"
+  ],
+  "forbidden_changes": [
+    "modify Source/**",
+    "modify tests/**",
+    "modify CMakeLists.txt or CMakePresets.json",
+    "modify scripts/**",
+    "modify Resources/Presets/**",
+    "claim host validation automated without tooling",
+    "add third-party dependencies"
+  ],
+  "allowed_symbols": [],
+  "decision_budget": {
+    "allowed": [
+      "markdown release checklist and phase summary only",
+      "tag each criterion automated vs manual based on validate.sh and unit tests",
+      "include operator sign-off placeholders"
+    ],
+    "forbidden": [
+      "edit production code",
+      "rewrite validation script in this task",
+      "mark unverified host items as CI-pass",
+      "add online service / telemetry requirements"
+    ]
+  },
+  "dependencies": [
+    "l.1"
+  ],
+  "task_timeout_seconds": 900,
+  "verification_commands": [],
+  "model": "openrouter/google/gemma-4-31b-it"
+}

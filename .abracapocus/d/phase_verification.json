@@ -1,0 +1,54 @@
+{
+  "verification": {
+    "checks": [
+      {
+        "name": "phase_d_dsp_files_exist",
+        "command": [
+          "bash",
+          "-lc",
+          "test -f Source/DSP/TightCut.h && test -f Source/DSP/TightCut.cpp && test -f Source/DSP/ChugStabilizer.h && test -f Source/DSP/ChugStabilizer.cpp && test -f tests/TightCutTests.cpp && test -f tests/ChugStabilizerTests.cpp"
+        ]
+      },
+      {
+        "name": "cmake_lists_lists_phase_d_sources",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"TightCut\\.cpp\" CMakeLists.txt && rg -q \"ChugStabilizer\\.cpp\" CMakeLists.txt && rg -q \"TightCutTests\\.cpp\" CMakeLists.txt && rg -q \"ChugStabilizerTests\\.cpp\" CMakeLists.txt"
+        ]
+      },
+      {
+        "name": "tightcut_hpf_and_punch_present",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"punch|cutoff|resonanc|Listen|listen\" Source/DSP/TightCut.h Source/DSP/TightCut.cpp && rg -q \"HighPass|highPass|HPF|slope\" Source/DSP/TightCut.h Source/DSP/TightCut.cpp"
+        ]
+      },
+      {
+        "name": "chug_detection_and_preserve_pick_present",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"PreservePick|preservePick|L_low|dominance|maxReduction\" Source/DSP/ChugStabilizer.h Source/DSP/ChugStabilizer.cpp && rg -q \"attack|release|hold\" Source/DSP/ChugStabilizer.h Source/DSP/ChugStabilizer.cpp"
+        ]
+      },
+      {
+        "name": "processor_wires_tightcut_and_chug",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"TightCut\" Source/PluginProcessor.h Source/PluginProcessor.cpp && rg -q \"ChugStabilizer\" Source/PluginProcessor.h Source/PluginProcessor.cpp"
+        ]
+      },
+      {
+        "name": "cmake_configure_only",
+        "command": [
+          "bash",
+          "-lc",
+          "cmake -S . -B build/phase-d-configure -DSHREDEQ_CONFIGURE_ONLY=ON"
+        ]
+      }
+    ]
+  }
+}

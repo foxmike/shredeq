@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "task_id": "j.4",
+  "phase": "J",
+  "phase_id": "j",
+  "title": "IntelligenceDrawer \u2014 Tight Cut, Chug, Resonance, Follower, Lock-In panels",
+  "description": "Implement the collapsible Guitar Intelligence side drawer housing Tight Cut, Chug Stabilizer, Resonance Scan, Note Follower, and Mix Lock-In module panels per SHREDEQ_SPEC.md \u00a713.6 and related control sections \u00a76\u2013\u00a710.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a713.6 drawer requirements; \u00a76 Tight Cut controls; \u00a77 Chug Stabilizer; \u00a78 resonance scan workflow; \u00a79 note follower; \u00a710 external-sidechain Mix Lock-In\n- Source/ParameterIDs.h corresponding parameter ID groups\n- Source/UI/ShredEQLookAndFeel.* from j.1\n- existing DSP public status getters if any (TightCut, ChugStabilizer, ResonanceSuppressor, NoteFollower, MaskingCarver) for status readouts \u2014 display only\n\nImplement Source/UI/IntelligenceDrawer.h and Source/UI/IntelligenceDrawer.cpp:\n1. Collapsible side panel Component with open/closed width animation or instant toggle (prefer simple setExpanded(bool) without mandatory animation).\n2. Five sub-panels (nested Components or sections) in order: Tight Cut, Chug Stabilizer, Resonance Scan, Note Follower, Mix Lock-In.\n3. Each module panel provides: enable toggle, status/readout area, primary controls, expand/deeper-editor disclosure for secondary params, audition (where parameter exists), and reset-to-default action for that module\u2019s parameters.\n4. Bind controls through APVTS attachments using existing ParameterIDs (construct with APVTS& and optional processor reference for status snapshots).\n5. Resonance Scan panel: scan / apply / clear candidate UI hooks calling processor methods if available via abstract callbacks; do not reimplement detector DSP.\n6. Mix Lock-In panel: masking amount/mode/collision preview-enable controls only \u2014 keep product boundary (no full multitrack host).\n7. Scrollable body when content exceeds drawer height.\n\nDo not modify PluginEditor layout, EQWorkspace, InspectorPanel, or CMakeLists.txt.",
+  "acceptance_criteria": [
+    "Source/UI/IntelligenceDrawer.h and Source/UI/IntelligenceDrawer.cpp exist",
+    "IntelligenceDrawer is a collapsible side panel with setExpanded/isExpanded (or equivalent) API",
+    "Drawer contains distinct sections for Tight Cut, Chug Stabilizer, Resonance Scan, Note Follower, and Mix Lock-In",
+    "Each module section includes enable, primary controls, deeper/secondary disclosure, and reset action hooks",
+    "Controls attach to APVTS parameters via ParameterIDs rather than inventing a parallel parameter store",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "antigravity_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/UI/IntelligenceDrawer.h",
+    "Source/UI/IntelligenceDrawer.cpp"
+  ],
+  "forbidden_changes": [
+    "modify Source/PluginEditor.*",
+    "modify CMakeLists.txt or CMakePresets.json",
+    "modify Source/PluginProcessor.* DSP wiring beyond read-only status includes (prefer callbacks; do not edit processor)",
+    "modify Source/UI/EQWorkspace.*, BandNode.*, InspectorPanel.*, ShredEQLookAndFeel.*",
+    "rewrite TightCut/Chug/Resonance/NoteFollower/Masking DSP algorithms",
+    "expand product into full multitrack masking host",
+    "add third-party dependencies",
+    "modify Source/ParameterIDs.h"
+  ],
+  "allowed_symbols": [
+    "IntelligenceDrawer",
+    "setExpanded",
+    "isExpanded",
+    "TightCutPanel",
+    "ChugStabilizerPanel",
+    "ResonanceScanPanel",
+    "NoteFollowerPanel",
+    "MixLockInPanel",
+    "resized",
+    "paint"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "nested section Components inside one drawer translation unit",
+      "callback interfaces for scan/apply/clear/audition when processor methods are not yet stable",
+      "Viewport for overflow scrolling",
+      "simple expand/collapse without mandatory animation"
+    ],
+    "forbidden": [
+      "PluginEditor fan-in ownership",
+      "CMake registration",
+      "DSP coefficient or processBlock ownership",
+      "second analyzer FFT"
+    ]
+  },
+  "dependencies": [
+    "j.1"
+  ],
+  "verification_commands": [],
+  "task_timeout_seconds": 900
+}

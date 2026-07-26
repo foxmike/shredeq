@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "task_id": "h.4",
+  "phase": "H",
+  "phase_id": "h",
+  "title": "MonoGuard \u2014 frequency-dependent coherence, protection mode",
+  "description": "Implement Mono Guard frequency-dependent L/R coherence analysis and optional protection mode per SHREDEQ_SPEC.md \u00a711.2. Depends on MidSideRouter existing so protection can reason about side-domain boosts without secretly embedding a second M/S matrix.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a711.2 (S_LR, rho(f); warn or limit excessive side boosts only when protection enabled; no silent alteration when protection off)\n- .abracapocus/SHREDEQ_SPEC.md \u00a711.3 (no delay-based width/decorrelation)\n- Source/DSP/MidSideRouter.* encode domain and side path from h.1 (read only; may accept mid/side or L/R buffers)\n- Source/Analysis/SpectralAnalysisEngine.* if spectral bins help coherence estimates (read only optional; MonoGuard may use lighter band-wise correlation instead)\n- Source/ParameterIDs.h monoGuardEnabled / monoGuardProtection if present (read only)\n- CMakeLists.txt (read only; h.5 owns registration)\n\nImplement Source/DSP/MonoGuard.h and Source/DSP/MonoGuard.cpp:\n1. Frequency-dependent coherence:\n   S_LR(f) = E[X_L(f) * conj(X_R(f))]\n   rho(f) = Re(S_LR(f)) / (sqrt(S_LL(f)*S_RR(f)) + eps)\n   Document band/bin resolution (fixed ERB/octave or FFT bins with fixed prep memory).\n2. prepare/reset; push or process stereo blocks updating smoothed band-wise rho without heap on audio thread when analysis path is engaged.\n3. Warning path (default when enabled analysis but protection off): expose per-band risk flags / rho snapshot getters for GUI; do NOT alter audio.\n4. Protection mode (only when user enables): limit excessive side energy/boosts in low-coherence (unstable / cancellation-risk) regions \u2014 e.g. cap side gain or attenuate side in bands where rho is near 0 or negative and proposed side boost exceeds a threshold. Never secretly engage protection when flag is off.\n5. APIs: setEnabled, setProtectionEnabled, getRho / getRiskMask, process or analyze+maybeProtect on side or L/R buffers. Coordinate with MidSideRouter by operating on Side after encode when available without re-encoding.\n6. True bypass of protection when disabled: analysis may still update meters if enabled, but audio path identity preserved when protection false.\n7. Fixed memory; finite guards; zero intentional latency.\n8. No PluginProcessor, CMakeLists, Lookahead, SidechainAnalyzer rewrites, or tests in this task.\n\nC++20/JUCE style consistent with Source/. verification_commands left empty.",
+  "acceptance_criteria": [
+    "Source/DSP/MonoGuard.h and Source/DSP/MonoGuard.cpp exist",
+    "MonoGuard estimates frequency-dependent rho(f) using S_LR / sqrt(S_LL*S_RR)+eps style coherence per \u00a711.2",
+    "With protection disabled, audio is unaltered while risk/rho diagnostics remain readable",
+    "With protection enabled, excessive side energy in low-coherence bands is limited/bounded without heap in process",
+    "No secret protection when the protection flag is off; zero intentional latency",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "antigravity_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/DSP/MonoGuard.h",
+    "Source/DSP/MonoGuard.cpp"
+  ],
+  "forbidden_changes": [
+    "modify CMakeLists.txt or CMakePresets.json",
+    "modify Source/PluginProcessor.* or Source/PluginEditor.*",
+    "rewrite Source/DSP/MidSideRouter.* encode/decode algorithms",
+    "modify Source/DSP/SidechainAnalyzer.* or Source/DSP/MaskingCarver.*",
+    "modify Source/DSP/LookaheadDelay.*",
+    "modify Source/ParameterIDs.h",
+    "modify tests/**",
+    "implement delay-based width or decorrelation",
+    "engage audible protection without an explicit protection-enabled flag"
+  ],
+  "allowed_symbols": [
+    "MonoGuard",
+    "prepare",
+    "reset",
+    "process",
+    "analyze",
+    "setEnabled",
+    "setProtectionEnabled",
+    "getRho",
+    "getRiskMask",
+    "isProtectionActive",
+    "protectSide"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "fixed band-wise running correlation without full STFT if simpler",
+      "optional light use of spectral magnitudes with fixed bins",
+      "side-gain cap or side HPF-band attenuation only under protection",
+      "operate on Side buffer after MidSideRouter encode"
+    ],
+    "forbidden": [
+      "own CMakeLists.txt",
+      "PluginProcessor wiring",
+      "silent always-on limiting",
+      "ShredWidth-style delay/mod width"
+    ]
+  },
+  "dependencies": [
+    "h.1"
+  ],
+  "verification_commands": [],
+  "task_timeout_seconds": 900
+}

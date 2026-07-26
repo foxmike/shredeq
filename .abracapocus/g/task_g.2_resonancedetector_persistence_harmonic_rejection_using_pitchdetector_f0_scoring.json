@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "task_id": "g.2",
+  "phase": "G",
+  "phase_id": "g",
+  "title": "ResonanceDetector \u2014 persistence, harmonic rejection using PitchDetector f0, scoring",
+  "description": "Implement ResonanceDetector on top of SpectralAnalysisEngine snapshots: local baseline excess, persistence analysis, candidate scoring, and musical-harmonic rejection using PitchDetector f0 per SHREDEQ_SPEC.md \u00a78.2\u20138.4 and \u00a721.6.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a78.2\u20138.4 (baseline B_t, excess E_t, persistence P_t, score R_t, harmonic rejection with f0)\n- .abracapocus/SHREDEQ_SPEC.md \u00a721.6 (fixtures intent: fixed resonances vs moving harmonics; never modifies sound; bounded recommendations)\n- Source/Analysis/SpectralAnalysisEngine.h snapshot / bin APIs from g.1 (read only)\n- Source/DSP/PitchDetector.h getFrequencyHz/getConfidence/TrackingState from phase F (read only; consume f0 snapshot only)\n- Source/DSP/* prepare/reset style (read only)\n- CMakeLists.txt (read only; g.3 owns registration)\n\nImplement Source/DSP/ResonanceDetector.h and Source/DSP/ResonanceDetector.cpp:\n1. ResonanceDetector with prepare(sampleRate, fftSizeOrMaxBins), reset(), setEnabled, and processControlRate / analyzeSnapshot that consumes a SpectralAnalysisEngine spectrum snapshot (log-magnitude S_t[k]) \u2014 analysis-thread/control-rate only, not processBlock DSP audio mutation.\n2. Local spectral baseline via octave- or ERB-domain smoothing: B_t[k] = smooth_broad(S_t[k]); excess E_t[k] = S_t[k] - B_t[k] per \u00a78.2.\n3. Persistence: P_t[k] = lambda * P_{t-1}[k] + (1-lambda) * indicator(E_t[k] > theta) with configurable lambda and theta; fixed-size P buffer allocated at prepare.\n4. Candidate score R_t[k] combining excess, persistence, narrowness N_t[k], perceptual weight W[k], and frequency stability F_t[k] per \u00a78.3. Document how N/W/F are computed (e.g. local peak sharpness, A-weight-ish or guitar-band weights, frame-to-frame bin stability).\n5. Musical-harmonic rejection per \u00a78.4: accept latest f0 Hz + confidence from PitchDetector (passed in, not owned). Lower candidate confidence when f_candidate \u2248 m * f0 for integer m (reasonable harmonic range, e.g. 1\u201316) and/or when the peak tracks f0 motion across frames. Fixed peaks present across different notes receive higher cab-resonance confidence than peaks that follow harmonics. When f0 confidence is low, do not over-penalize (document fallback).\n6. Emit a bounded list of ResonanceCandidate cards (fixed max, e.g. top 8\u201316): center frequency Hz, bandwidth/Q hint, excess dB, persistence, confidence, classification hints (e.g. PersistentCabinet, IntermittentFizzCluster, BoxResonance, NoteLinkedLowerConfidence). Never apply audio processing \u2014 detection only.\n7. Scan-session helpers usable by g.3: beginScan/endScan or accumulate-for-duration flags that freeze/summary candidates over a scan window without unbounded growth.\n8. Guards: finite scores, clamp frequencies to sensible guitar/bass diagnostic range (e.g. ~150 Hz\u201316 kHz for suppressor-aligned candidates), valid bin indices after sample-rate/FFT changes via prepare/reset.\n9. No ResonanceSuppressor filters, no PluginProcessor, no tests, no CMakeLists, no SpectralAnalysisEngine rewrites beyond reading its public snapshot API.\n\nverification_commands left empty.",
+  "acceptance_criteria": [
+    "Source/DSP/ResonanceDetector.h and Source/DSP/ResonanceDetector.cpp exist",
+    "ResonanceDetector computes baseline B_t, excess E_t, and persistence P_t from engine log-magnitude spectra per SHREDEQ_SPEC.md \u00a78.2\u20138.3",
+    "Candidate score R_t combines excess, persistence, narrowness, perceptual weight, and stability; emits a fixed-capacity ranked candidate list without heap growth on the analysis path",
+    "Musical-harmonic rejection uses external PitchDetector f0/confidence to down-weight peaks at m*f0 and peaks that move with f0; fixed cross-note peaks retain higher confidence per \u00a78.4",
+    "Detector never modifies audio \u2014 analysis/candidate OEM only; scan helpers support bounded accumulate/summary for the scan workflow",
+    "prepare/reset paths bound all persistence and working buffers; numerical guards keep scores/frequencies finite",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "codex_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/DSP/ResonanceDetector.h",
+    "Source/DSP/ResonanceDetector.cpp"
+  ],
+  "forbidden_changes": [
+    "modify Source/Analysis/SpectralAnalysisEngine.* beyond required includes/read-only API use (do not edit those files)",
+    "modify Source/Analysis/AnalysisFifo.*",
+    "modify Source/DSP/PitchDetector.*",
+    "modify Source/DSP/ResonanceSuppressor.*",
+    "modify Source/PluginProcessor.* or Source/PluginEditor.*",
+    "modify CMakeLists.txt or CMakePresets.json",
+    "modify tests/**",
+    "modify Source/ParameterIDs.h",
+    "apply audio notches or own suppressor slots",
+    "add third-party dependencies"
+  ],
+  "allowed_symbols": [
+    "ResonanceDetector",
+    "ResonanceCandidate",
+    "prepare",
+    "reset",
+    "setEnabled",
+    "analyzeSnapshot",
+    "processControlRate",
+    "beginScan",
+    "endScan",
+    "getCandidates",
+    "setPersistenceLambda",
+    "setExcessThreshold",
+    "setPitchEstimate",
+    "smoothBroad",
+    "scoreBin"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "octave- or ERB-domain smoothing for local baseline",
+      "fixed max candidate count with partial sort/heap of fixed size",
+      "consume PitchDetector f0 by value each analyze tick without owning the pitch thread",
+      "scan accumulation into fixed candidate buffers"
+    ],
+    "forbidden": [
+      "audio-thread FFT or detector work that violates \u00a718.1",
+      "CMakeLists ownership",
+      "ResonanceSuppressor dynamic notches",
+      "PluginProcessor wiring",
+      "rewriting SpectralAnalysisEngine STFT"
+    ]
+  },
+  "dependencies": [
+    "g.1"
+  ],
+  "verification_commands": [],
+  "task_timeout_seconds": 900
+}

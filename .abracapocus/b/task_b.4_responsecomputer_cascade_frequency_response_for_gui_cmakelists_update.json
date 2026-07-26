@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "task_id": "b.4",
+  "phase": "B",
+  "phase_id": "b",
+  "title": "ResponseComputer \u2014 cascade frequency response for GUI, CMakeLists update",
+  "description": "Implement composite frequency-response computation for the parametric cascade and register new DSP sources in CMake. This task is the sole CMakeLists.txt owner in phase b.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- Source/DSP/BiquadCoefficients.* magnitude/complex helpers\n- Source/DSP/ParametricBand.* band parameter accessors\n- CMakeLists.txt target_sources for ShredEQ and ShredEQUnitTests (as created in phase a)\n- .abracapocus/SHREDEQ_SPEC.md \u00a73.5 cascade G_total(w) = 20*log10(|prod H_i|)\n\nImplement Source/DSP/ResponseComputer.h and Source/DSP/ResponseComputer.cpp:\n1. Message-thread-safe API: given a snapshot of band parameters (or const ParametricBand/ParametricEQ view), compute composite complex/magnitude response at approximately 512 log-spaced frequency points from a sensible low bound (e.g. 10\u201320 Hz) to Nyquist for sampleRate.\n2. Output buffers for magnitude dB and optional phase degrees/radians into caller-provided spans/arrays (no GUI painting here). Allow preallocated storage inside ResponseComputer constructed/resized off the audio thread; document that compute() must not run on the audio thread if it allocates.\n3. Include only enabled, non-bypassed bands. Respect per-band type/slope via BiquadCoefficients cascade design (TPT visual match can approximate with equivalent biquad coefficients of same f/G/Q/type for display).\n4. Stereo/mid-side display can start as mono/linked composite; if routing text is needed for GUI later, expose hook parameters only.\n5. Update CMakeLists.txt to add the new phase-b DSP sources to plugin and unit-test targets if those targets list sources explicitly:\n   - Source/DSP/BiquadCoefficients.cpp\n   - Source/DSP/TPTFilter.cpp\n   - Source/DSP/ParametricBand.cpp\n   - Source/DSP/ResponseComputer.cpp\n   Do not remove existing sources; do not add tests/*.cpp for Biquad/Parametric yet (task b.5 owns tests files; list of test sources may wait for b.5 if CMake already uses a glob\u2014prefer explicit append of DSP .cpp only).\n\nDo NOT implement PluginEditor curve painting, do not own unit tests, and do not expand scope beyond CMake source list updates.",
+  "acceptance_criteria": [
+    "Source/DSP/ResponseComputer.h and Source/DSP/ResponseComputer.cpp exist",
+    "ResponseComputer computes composite magnitude response at approximately 512 log-spaced points between a low frequency bound and Nyquist",
+    "Composite response follows cascade product of enabled band transfer functions (dB sum of section magnitudes)",
+    "CMakeLists.txt lists BiquadCoefficients.cpp, TPTFilter.cpp, ParametricBand.cpp, and ResponseComputer.cpp on the appropriate ShredEQ targets",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "antigravity_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/DSP/ResponseComputer.h",
+    "Source/DSP/ResponseComputer.cpp",
+    "CMakeLists.txt"
+  ],
+  "forbidden_changes": [
+    "modify CMakePresets.json",
+    "rewrite BiquadCoefficients/TPTFilter/ParametricBand beyond necessary includes from ResponseComputer",
+    "modify tests/**",
+    "modify Source/PluginEditor.* or GUI painting",
+    "modify Source/PluginProcessor.* processBlock wiring",
+    "add third-party plotting libraries",
+    "remove unrelated existing CMake sources or options"
+  ],
+  "allowed_symbols": [
+    "ResponseComputer",
+    "compute",
+    "kDefaultResponsePoints",
+    "ResponseCurve",
+    "fillLogSpacedFrequencies"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "512 log-spaced points as default constexpr",
+      "approximate TPT band visuals with equivalent RBJ coefficients",
+      "append DSP cpp files to existing juce_add_plugin and unit-test target_sources",
+      "message-thread documentation and optional preallocated work buffers"
+    ],
+    "forbidden": [
+      "own unit test files",
+      "change manufacturer codes or plugin formats",
+      "GUI component implementation",
+      "audio-thread heap growth in compute hot path without documentation"
+    ]
+  },
+  "dependencies": [
+    "b.3"
+  ],
+  "task_timeout_seconds": 900,
+  "verification_commands": []
+}

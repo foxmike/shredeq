@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "task_id": "h.3",
+  "phase": "H",
+  "phase_id": "h",
+  "title": "LookaheadDelay \u2014 circular buffer, setLatencySamples, click-free changes",
+  "description": "Implement optional global lookahead delay with exact host-reported latency per SHREDEQ_SPEC.md \u00a719.2.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a719.1\u201319.2 (default 0 samples; optional 0.5/1/2/5 ms; report exact latency; live profiles default off; no hidden latency)\n- Source/PluginProcessor.* latency APIs only as reference for future wiring (read only; h.5 calls setLatencySamples)\n- Sibling Source/DSP/* circular-buffer or delay patterns if any (read only)\n- Source/ParameterIDs.h lookahead mode enum if present (read only)\n- CMakeLists.txt (read only; h.5 owns registration)\n\nImplement Source/DSP/LookaheadDelay.h and Source/DSP/LookaheadDelay.cpp:\n1. Preallocated circular buffer sized at prepare for maximum mode (5 ms at max supported sample rate) \u00d7 channels; no runtime heap growth.\n2. Modes: Off, 0.5 ms, 1 ms, 2 ms, 5 ms. Map mode \u2192 delaySamples = round(ms * sampleRate / 1000). Off \u21d2 0 samples delay and pass-through.\n3. process: delay all channels identically (stereo main; design for \u22652 channels). Dry path when Off is true bypass (copy or in-place no-op with zero extra latency).\n4. getLatencySamples() returns the exact integer delay currently applied (0 when Off). h.5 will call AudioProcessor::setLatencySamples with this value \u2014 document the contract in the header.\n5. Click-free delay changes: crossfade, overlap-add short crossfade, or equivalent when mode/delay changes; clear or fade residual state on reset/prepare; no zipper clicks from abrupt read-index jumps.\n6. setMode / setDelayMilliseconds APIs with clamp to allowed set; prepare(sampleRate, maxBlockSize, numChannels); reset() clears buffer to zeros.\n7. Audio-thread safe: no locksaggingque, no allocations in process.\n8. No PluginProcessor setLatencySamples call in this task (module only reports latency). No M/S, sidechain, tests, or CMakeLists changes.\n\nC++20/JUCE style consistent with Source/. verification_commands left empty.",
+  "acceptance_criteria": [
+    "Source/DSP/LookaheadDelay.h and Source/DSP/LookaheadDelay.cpp exist",
+    "LookaheadDelay supports Off, 0.5, 1, 2, and 5 ms modes with preallocated circular buffer sized at prepare",
+    "getLatencySamples() returns exact integer delay (0 when Off) for host PDC via future setLatencySamples",
+    "Mode/delay changes are click-free (crossfade or equivalent); reset clears delay memory",
+    "Off mode is true bypass with zero samples latency; process is allocation-free",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "codex_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/DSP/LookaheadDelay.h",
+    "Source/DSP/LookaheadDelay.cpp"
+  ],
+  "forbidden_changes": [
+    "modify CMakeLists.txt or CMakePresets.json",
+    "modify Source/PluginProcessor.* or Source/PluginEditor.*",
+    "modify Source/DSP/MidSideRouter.*",
+    "modify Source/DSP/SidechainAnalyzer.* or Source/DSP/MaskingCarver.*",
+    "modify Source/DSP/MonoGuard.*",
+    "modify Source/ParameterIDs.h",
+    "modify tests/**",
+    "call AudioProcessor::setLatencySamples from this module",
+    "introduce hidden non-reported latency",
+    "allocate delay memory inside process"
+  ],
+  "allowed_symbols": [
+    "LookaheadDelay",
+    "LookaheadMode",
+    "prepare",
+    "reset",
+    "process",
+    "setMode",
+    "setDelayMilliseconds",
+    "getLatencySamples",
+    "getDelayMilliseconds",
+    "isEnabled"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "fixed std::vector or AudioBuffer circular storage allocated in prepare",
+      "enum class LookaheadMode { Off, Ms0_5, Ms1, Ms2, Ms5 }",
+      "equal-power or linear crossfade on delay change",
+      "integer sample delay from rounded ms*sr/1000"
+    ],
+    "forbidden": [
+      "own CMakeLists.txt",
+      "PluginProcessor wiring or setLatencySamples ownership",
+      "variable heap growth per block",
+      "fractional delay interpolation requirement beyond integer circular delay unless needed for click-free crossfade only"
+    ]
+  },
+  "dependencies": [],
+  "verification_commands": [],
+  "task_timeout_seconds": 900
+}

@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "task_id": "a.2",
+  "phase": "A",
+  "phase_id": "a",
+  "title": "ParameterIDs (complete v1.0 inventory), APVTS, PluginProcessor with sidechain and MIDI bus",
+  "description": "Implement the complete v1.0 ParameterIDs inventory, APVTS parameter layout ownership in PluginProcessor, and AudioProcessor bus configuration for main/sidechain/MIDI.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\na.2 is the sole owner of CMakeLists.txt, PluginProcessor.*, and ParameterIDs.h in this phase after a.1. If target_sources or includes must change for ParameterIDs (header-only) or StateManager stubs later, only touch CMakeLists.txt here when necessary to keep the processor target buildable; prefer header-only ParameterIDs with layout built inside PluginProcessor.cpp.\n\nBefore editing, inspect:\n- /home/mike/dev/mike/music/plugins/shredboost/Source/PluginProcessor.h and .cpp (BusesProperties, APVTS construction, get/setStateInformation stubs, processBlock shape)\n- /home/mike/dev/mike/music/plugins/shredboost/Source/Parameters/ParameterIDs.h and ParameterLayout.cpp (ID string style)\n- .abracapocus/SHREDEQ_SPEC.md parameter sections for ranges/names if present\n- CMakeLists.txt from a.1\n\nImplement:\n1. Source/ParameterIDs.h\n   - Namespace or nested struct of constexpr string IDs / ParameterID helpers for the FULL v1.0 automatable inventory (stable string values, no renames later):\n   - Per band 1..12: enabled, stage, type, frequency, gain, q, slope, route, dynamicMode, dynamicRange, threshold, ratio, attack, hold, release, knee, detectorSource, detectorFrequency, detectorQ, trackingSource, trackingHarmonic, lookahead.\n   - Global: inputGain, outputGain, globalBypass, analyzerEnable, abState, profileIndex, tuningIndex.\n   - Tight Cut: enabled, frequency, slope, resonance, punchRatio, punchGain, punchQ, placement, routing, listenRemoved.\n   - Chug Stabilizer: enabled, frequency, bandwidth, maxReduction, threshold, attack, hold, release, preservePick, transientSens, dominanceSens.\n   - Multiband: enabled, crossover1-3 freqs, and per-zone (4 zones) gain/threshold/ratio/attack/release/transientEmphasis/sustainEmphasis/placement/detectorSource/autoThreshold/mode.\n   - Sidechain: source, lockInEnabled, lockInAmount, carveMaxGain, carveThreshold.\n   - M/S: sideHighPass, monoGuardEnabled, monoGuardProtection.\n   - Resonance suppressor: 6 slots \u00d7 (enabled, frequency, q, maxDepth, attack, release, persistence, mode, placement, freeze).\n   - Note follower: trackingSource, harmonic, centsOffset, confidenceThreshold, smoothing, holdTime, returnTime, minFreq, maxFreq, midiPriority.\n   - Lookahead mode (off/0.5/1/2/5ms) and output trim if distinct from outputGain.\n   - Use a consistent prefix scheme (e.g. bandN_frequency, tightCut_enabled, chug_*, mb_*, sc_*, ms_*, resN_*, note_*, lookaheadMode).\n\n2. Source/PluginProcessor.h / .cpp\n   - Class ShredEQAudioProcessor : juce::AudioProcessor.\n   - Constructor BusesProperties: main stereo input, optional sidechain input bus (\"Sidechain\"), stereo output. Standalone must run without sidechain present.\n   - isBusesLayoutSupported: allow mono\u2192mono, stereo\u2192stereo, and stereo main + mono or stereo sidechain when sidechain bus is enabled; reject mismatched main/output channel counts.\n   - Create juce::AudioProcessorValueTreeState in ctor via createParameterLayout() that registers ALL ParameterIDs with sensible default ranges (log frequency 20\u201320k, gain dB, Q, enum choices for filter types/modes). Layout may live as a free function in PluginProcessor.cpp or a private static method\u2014keep it in allowed files only.\n   - processBlock stub: clear unused outputs, ScopedNoDenormals, ignore MIDI for now (accept MIDI buffer then empty handling), no heap alloc.\n   - prepareToPlay/releaseResources stubs; hasEditor true; createEditor can return nullptr until a.3 or a minimal forward-declare if compile requires\u2014prefer returning nullptr with hasEditor() true only if editor sources already compile empty classes; coordinate with listed sources: implement a minimal editor include if the target already compiles PluginEditor.cpp (editor body is a.3\u2014provide a tiny non-crashing createEditor that constructs editor if PluginEditor exists from wave 3 dependency; since a.3 depends on a.2, for a.2 provide PluginEditor forward declaration and createEditor returning new ShredEQAudioProcessorEditor(*this) only if editor headers exist; otherwise temporary nullptr and hasEditor false is NOT allowed long-term\u2014create thin PluginEditor.h/cpp placeholders in a.2 ONLY if required to compile, but prefer a.2 not owning editor: keep createEditor returning nullptr and hasEditor() return false until a.3, OR hasEditor true with nullptr is invalid\u2014use hasEditor() false temporarily is DRYER but phase wants editor later. Decision: hasEditor() returns true; createEditor() returns nullptr is bad JUCE practice. a.2 should declare createEditor and implement a minimal include of PluginEditor.h with a stub editor class moved to a.3 ownership\u2014a.2 writes only Processor files. So define createEditor in .cpp including PluginEditor.h; a.3 supplies PluginEditor. Until a.3 runs, build may fail if editor missing\u2014acceptable sequential wave.\n   - getStateInformation/setStateInformation stubs that serialize APVTS state to/from XML ValueTree with a schema_version property (int, start at 1). Full A/B and presets are a.3 StateManager\u2014processor may call through a simple apvts.copyState()/replaceState() only.\n   - acceptsMidi() true (MIDI note following); producesMidi false; isMidiEffect false.\n   - Expose getAPVTS() reference.\n\n3. CMakeLists.txt\n   - Only if needed: ensure Source/PluginProcessor.cpp remains in target_sources; do not add unrelated sources. Do not reassign company/plugin codes.\n\nDo NOT implement StateManager, PluginEditor UI, DSP bands, or README/.gitignore.",
+  "acceptance_criteria": [
+    "Source/ParameterIDs.h exists and declares stable IDs covering all 12 bands, Tight Cut, Chug Stabilizer, multiband crossovers and 4 zones, sidechain, M/S, 6 resonance slots, note follower, lookahead, and globals listed in the phase goal",
+    "Source/PluginProcessor.h and Source/PluginProcessor.cpp define ShredEQAudioProcessor with APVTS constructed from a layout that references ParameterIDs",
+    "PluginProcessor configures main input, optional sidechain input, and output via BusesProperties",
+    "isBusesLayoutSupported accepts mono, stereo, and stereo+sidechain layouts and allows standalone without sidechain",
+    "acceptsMidi() returns true; NEEDS_MIDI_INPUT remains enabled in CMake if CMakeLists.txt is touched",
+    "getStateInformation/setStateInformation round-trip APVTS state and include schema_version",
+    "processBlock stub compiles conceptually with ScopedNoDenormals and no intentional heap allocation in the hot path",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "codex_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/ParameterIDs.h",
+    "Source/PluginProcessor.h",
+    "Source/PluginProcessor.cpp",
+    "CMakeLists.txt"
+  ],
+  "forbidden_changes": [
+    "modify Source/StateManager.*",
+    "modify Source/PluginEditor.*",
+    "modify scripts/**, CMakePresets.json, .gitmodules, README.md, .gitignore, tests/**",
+    "implement EQ DSP, dynamics, multiband processing, or analyzers",
+    "change PLUGIN_MANUFACTURER_CODE or COMPANY_NAME away from NSPC / nSpace Systems",
+    "add non-JUCE third-party dependencies"
+  ],
+  "allowed_symbols": [
+    "ShredEQAudioProcessor",
+    "createParameterLayout",
+    "ParameterIDs",
+    "isBusesLayoutSupported",
+    "getStateInformation",
+    "setStateInformation",
+    "getAPVTS",
+    "processBlock",
+    "schema_version"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "header-only ParameterIDs with createParameterLayout in PluginProcessor.cpp",
+      "optional sidechain bus with safe standalone layout support",
+      "APVTS XML state stub with schema_version property",
+      "minimal CMakeLists.txt target_sources touch if required for build graph"
+    ],
+    "forbidden": [
+      "own PluginEditor or StateManager beyond what processor linkage requires",
+      "rename parameter ID strings after defining them",
+      "full preset A/B engine inside PluginProcessor",
+      "implicit new plugin formats or manufacturer branding"
+    ]
+  },
+  "dependencies": [
+    "a.1"
+  ],
+  "task_timeout_seconds": 1200,
+  "verification_commands": []
+}

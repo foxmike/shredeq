@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "task_id": "k.4",
+  "phase": "K",
+  "phase_id": "k",
+  "title": "Delta audition modes, processBlock wiring, CMakeLists",
+  "description": "Fan-in task: wire A/B crossfade + gain-matched bypass, profile/tuning selection, factory preset discovery, and delta (removed-signal) audition into PluginProcessor/PluginEditor, and register phase-K sources in CMakeLists.txt. Sole owner of Source/PluginProcessor.*, Source/PluginEditor.cpp, and CMakeLists.txt in phase K per async_notes.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a714.1\u201314.3 (A/B, gain match, delta audition modes: full removed signal, selected band only, all dynamic reductions, resonance suppressor, sidechain carve only, Tight Cut removal, Chug Stabilizer removal)\n- .abracapocus/SHREDEQ_SPEC.md \u00a713.2 header controls (A/B, gain-matched audition, profile/tuning, presets)\n- Source/StateManager.* A/B + GainMatch APIs from k.1\n- Source/Profiles.* catalogs from k.2\n- Resources/Presets/* from k.3\n- Existing removed-signal / listenRemoved taps on TightCut, Chug, ResonanceSuppressor, dynamic bands, MaskingCarver if present\n- Source/PluginProcessor.h/.cpp prepare/processBlock order from phases G\u2013J\n- Source/PluginEditor.* header controls from j.5\n- CMakeLists.txt append / juce_add_binary_data patterns from prior phases\n\nImplement RejectedSignalRouter (may live as nested class or helper inside PluginProcessor files if a separate DSP file is not in allowed paths \u2014 keep symbols in allowed processor files only):\n1. Enum DeltaAuditionMode covering \u00a714.3 modes plus Off.\n2. RT-safe select: when mode\u2260Off, replace or blend main output with the corresponding removed-signal buffer (y_removed = x - y_processed or module-provided removed tap). Modes that lack a tap available idle to silence or dry with documented fallback \u2014 never deallocate.\n3. Mutual exclusion with ordinary wet path; no double gain; true Off restores normal processing output.\n\nPluginProcessor.h/.cpp wiring:\n1. Own/ensure StateManager member; prepare GainMatch meter; each processBlock push pre-EQ/post-EQ (or in/out) levels into match meter; apply G_match as a temporary trim on bypass/audition path when gain-matched bypass enabled \u2014 freeze match while A/B crossfade active.\n2. A/B: on abState/param or StateManager switch, apply target slot and run click-safe equal-power/linear crossfade of dry-versus-pending or previous-versus-new output over 5\u201330 ms using StateManager helpers; no zipper.\n3. Profile/tuning: read profileIndex/tuningIndex (and custom tuning if stored); expose getActivePlacement()/getActiveTuning() for editor/NoteRuler; applyPlacementDefaults only on explicit user/profile-load action, not every block.\n4. Factory presets: ensure StateManager can see Resources/Presets path or BinaryData; load APIs remain message-thread.\n5. Delta audition: parameter or processor setter setDeltaAuditionMode; wire module removed taps into RejectedSignalRouter at end of chain before outputGain as appropriate; honor globalBypass.\n6. Do not rewrite upstream DSP algorithms beyond member wiring and parameter plumbing.\n\nPluginEditor.cpp (and only .cpp unless header already exposes needed members \u2014 prefer .cpp-only edits; if a declaration is mandatory, keep changes minimal and still within allowed_write_paths which lists PluginEditor.cpp only \u2014 use existing header hooks from j.5):\n1. Wire header A/B switch, copy A\u2192B, gain-matched bypass toggle, profile selector, tuning selector, preset browser to StateManager/Profiles/APVTS.\n2. Wire delta audition mode control (combo or buttons) to processor RejectedSignalRouter modes.\n3. No full UI redesign; extend existing j.5 header controls.\n\nCMakeLists.txt:\n1. Append Source/StateManager.cpp if not already present; append Source/Profiles.cpp.\n2. Ensure Resources/Presets factory JSON are installed or registered via juce_add_binary_data / target resource copy \u2014 minimal append-only pattern matching the repo.\n3. Append tests/StateTests.cpp to the unit-test target (k.5 owns test body).\n4. No preset/target rename churn.\n\nDo not implement unit test bodies. verification_commands left empty.",
+  "acceptance_criteria": [
+    "PluginProcessor wires StateManager A/B switch with click-safe crossfade and gain-matched bypass trim that freezes during comparison switching",
+    "RejectedSignalRouter or equivalent supports Off plus \u00a714.3 delta audition modes and is selectable from the processor",
+    "profileIndex/tuningIndex connect to Profiles catalog; factory presets under Resources/Presets are discoverable for load",
+    "PluginEditor.cpp header controls wire A/B, gain-match, profile/tuning, presets, and delta audition without redesigning the whole UI",
+    "CMakeLists.txt lists Source/Profiles.cpp and tests/StateTests.cpp and registers/preserves factory preset resources",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "antigravity_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/PluginProcessor.h",
+    "Source/PluginProcessor.cpp",
+    "Source/PluginEditor.cpp",
+    "CMakeLists.txt"
+  ],
+  "forbidden_changes": [
+    "rewrite Source/StateManager.* APIs beyond call-site usage",
+    "rewrite Source/Profiles.* catalog definitions",
+    "modify Resources/Presets JSON contents",
+    "modify tests/StateTests.cpp body beyond CMake listing",
+    "modify Source/ParameterIDs.h",
+    "redesign entire PluginEditor layout from phase J",
+    "add third-party dependencies"
+  ],
+  "allowed_symbols": [
+    "RejectedSignalRouter",
+    "DeltaAuditionMode",
+    "setDeltaAuditionMode",
+    "ShredEQAudioProcessor",
+    "StateManager",
+    "ProfileCatalog",
+    "processBlock",
+    "prepareToPlay"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "RejectedSignalRouter as processor nested helper",
+      "equal-power or linear A/B output crossfade 5\u201330 ms",
+      "juce_add_binary_data or runtime path load for factory presets",
+      "append-only CMakeLists edits"
+    ],
+    "forbidden": [
+      "silent permanent outputGain automation from match meter",
+      "auto-apply placement defaults every processBlock",
+      "rewrite DSP module algorithms"
+    ]
+  },
+  "dependencies": [
+    "k.1",
+    "k.2",
+    "k.3"
+  ],
+  "verification_commands": [],
+  "task_timeout_seconds": 900
+}

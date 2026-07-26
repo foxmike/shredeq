@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "task_id": "l.1",
+  "phase": "L",
+  "phase_id": "l",
+  "title": "Validation script \u2014 build, test, RT-safety, latency checks",
+  "description": "Create scripts/validate.sh as the CI/operator validation entrypoint for ShredEQ Release build, unit tests, and static/source checks covering RT-safety, zero-latency reporting, click-free bypass intent, and state round-trip coverage pointers.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- scripts/build_all.sh (configure/build patterns and presets)\n- CMakePresets.json Release / linux-release (or equivalent) configure, build, and test presets\n- CMakeLists.txt test target name (ShredEQUnitTests / ctest integration)\n- .abracapocus/SHREDEQ_SPEC.md \u00a718.1 (audio-thread rules: no heap/locks/IO on audio thread), \u00a719.1 (zero-latency default / reported latency), \u00a714.2 (gain-matched bypass / click-free), \u00a717 / \u00a721.8 (state save/restore)\n- .abracapocus/SHREDEQ_SPEC.md \u00a722 Release Criteria (validation scripts complete)\n- Existing tests/*Tests.cpp names for ctest discovery\n\nImplement scripts/validate.sh:\n1. Shebang + set -euo pipefail; cd to repo root from script location.\n2. Configurable BUILD_PRESET / CONFIGURE_PRESET defaulting to the project's Release preset when present (e.g. linux-release), otherwise document fallback to RelWithDebInfo with a clear stderr note \u2014 do not silently skip configure.\n3. Steps (each section echoed clearly; non-zero exit on failure):\n   a. Configure: cmake --preset \"$CONFIGURE_PRESET\" (or cmake -S/-B equivalent matching CMakePresets).\n   b. Build Release (or chosen preset): cmake --build --preset \u2026 or cmake --build \"$BINARY_DIR\" --config Release -j\"$(nproc)\".\n   c. Unit tests: ctest --test-dir \"$BINARY_DIR\" --output-on-failure (or cmake --build \u2026 --target RUN_TESTS / ctest --preset) so juce UnitTests run.\n   d. RT-safety static checks: rg (or grep -E) over Source/ for forbidden audio-thread patterns that must not appear in processBlock hot paths without review \u2014 at minimum fail or warn-on-match with explicit allowlist comments for known-safe uses:\n      - new / delete / malloc / free / realloc inside processBlock files (PluginProcessor.cpp and Source/DSP/**)\n      - std::lock_guard / std::mutex / CriticalSection / MessageManager::callAsync in DSP process paths\n      - fopen / ifstream / ofstream / juce::File on audio-thread named functions where pattern is cheap to flag\n      Document that full proof is manual/host; script provides gated heuristics.\n   e. Zero-latency verification: assert source/docs/code still treat default latency as 0 \u2014 e.g. rg for getLatencySamples and confirm zero-default / lookahead-only non-zero path in PluginProcessor (fail if getLatencySamples hardcodes a positive constant with no lookahead gate). Prefer source-level checks that work without running the plugin host.\n   f. Bypass / click-free pointers: rg that gain-match / crossfade / bypass smoothing symbols exist (StateManager / PluginProcessor) so release gates are not vacant; do not require real-time audio fixtures in this script.\n   g. State round-trip: ensure tests/StateTests.cpp (or equivalent) exists and is part of the test build OR rg UnitTest coverage for setStateInformation/getStateInformation / schema_version / A/B restore; fail if neither tests nor symbols exist.\n4. Exit 0 only if build + ctest + required checks pass. Print a short summary: VERIFIED (automated) vs REQUIRES_MANUAL (host pluginval, DAW sidechain, Windows build) matching honesty required by phase L.\n5. No DSP edits. Do not modify CMakeLists, Source/**, or docs (l.3 owns release docs).\n\nverification_commands left empty \u2014 C++ adapter infers cmake/ctest when applicable; this task authors the script itself.",
+  "acceptance_criteria": [
+    "scripts/validate.sh exists with set -euo pipefail and configures/builds using a Release (or documented fallback) CMake preset",
+    "scripts/validate.sh runs ctest (or equivalent unit-test invocation) with failure non-zero exit",
+    "scripts/validate.sh includes RT-safety static checks over Source/PluginProcessor.cpp and Source/DSP",
+    "scripts/validate.sh includes zero-latency / getLatencySamples source checks and state round-trip test or symbol gates",
+    "scripts/validate.sh prints a summary distinguishing automated vs manual/host verification",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "pi_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "scripts/validate.sh"
+  ],
+  "forbidden_changes": [
+    "modify Source/**",
+    "modify tests/**",
+    "modify CMakeLists.txt or CMakePresets.json",
+    "modify Resources/Presets/**",
+    "modify docs/**",
+    "add third-party dependencies",
+    "change DSP algorithms or PluginProcessor behavior"
+  ],
+  "allowed_symbols": [],
+  "decision_budget": {
+    "allowed": [
+      "bash validation script with cmake preset + ctest + rg/grep static checks",
+      "document fallback when Release preset name differs",
+      "print verified-vs-manual summary for host checks not runnable in CI"
+    ],
+    "forbidden": [
+      "rewrite build system",
+      "require network services or online license checks",
+      "claim host DAW validation passed without running hosts",
+      "edit production C++ to make greps pass"
+    ]
+  },
+  "dependencies": [],
+  "task_timeout_seconds": 900,
+  "verification_commands": [],
+  "model": "openrouter/z-ai/glm-5.2"
+}

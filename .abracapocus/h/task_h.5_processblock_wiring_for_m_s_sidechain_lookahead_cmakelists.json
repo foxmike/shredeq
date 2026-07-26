@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "task_id": "h.5",
+  "phase": "H",
+  "phase_id": "h",
+  "title": "processBlock wiring for M/S, sidechain, lookahead, CMakeLists",
+  "description": "Wire MidSideRouter, SidechainAnalyzer, MaskingCarver, MonoGuard, and LookaheadDelay into PluginProcessor processBlock / prepareToPlay and register all phase-H sources in CMakeLists.txt. This task is the sole owner of PluginProcessor.* and CMakeLists.txt for phase H.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a710, \u00a711, \u00a719.2 (sidechain host-only; stage-level M/S; optional lookahead PDC)\n- .abracapocus/SHREDEQ_SPEC.md \u00a718 (audio thread: no heap/locks; sidechain skip when absent)\n- Source/DSP/MidSideRouter.*, SidechainAnalyzer.*, MaskingCarver.*, MonoGuard.*, LookaheadDelay.* public APIs from h.1\u2013h.4\n- Source/PluginProcessor.h/.cpp existing prepareToPlay/processBlock order (TightCut, Chug, parametric, multiband, resonance, etc.)\n- Source/ParameterIDs.h lookahead, sideHighPass, monoGuard*, lockIn/carve sidechain IDs (read only \u2014 do not reinvent IDs file)\n- CMakeLists.txt append patterns from phases B\u2013G\n- BusesProperties / isBusesLayoutSupported sidechain handling from phase A (standalone without sidechain must remain safe)\n\nWire Source/PluginProcessor.h/.cpp:\n1. Own by-value members: MidSideRouter, SidechainAnalyzer, MaskingCarver, MonoGuard, LookaheadDelay (names consistent with existing style).\n2. prepareToPlay/releaseResources/reset: prepare all five with sampleRate/maxBlockSize/channel counts; reset on release as needed.\n3. Lookahead: read lookahead mode from APVTS; set LookaheadDelay mode; call setLatencySamples(lookaheadDelay.getLatencySamples()) whenever mode or sample rate changes so host PDC matches exact delay. Off \u2192 0.\n4. processBlock signal order (document chosen order in a short comment): apply LookaheadDelay on main input early enough that downstream dynamics can use delayed dry versus sidechain/detector timing as designed; obtain sidechain bus buffers via getBusBuffer when layout has sidechain, else skip analyzer push and idle carver (standalone-safe); drive SidechainAnalyzer with main+sidechain; drive MaskingCarver on audible path only for enabled carve bands; wrap parametric (and any stage marked M/S) with MidSideRouter encode \u2192 stages \u2192 decode once; run MonoGuard analyze and optional protection on side path without double-encoding; honor global bypass.\n5. Push APVTS parameters each block (or on change) for side HPF, mono guard enable/protection, lock-in/carve controls, lookahead mode \u2014 no heap.\n6. Do not rewrite upstream DSP algorithms beyond member wiring and parameter plumbing.\n\nCMakeLists.txt:\n1. Append Source/DSP/MidSideRouter.cpp, SidechainAnalyzer.cpp, MaskingCarver.cpp, MonoGuard.cpp, LookaheadDelay.cpp to plugin/DSP targets.\n2. Append tests/MidSideTests.cpp and tests/LookaheadTests.cpp to the test target (h.6 owns test bodies).\n3. Append-only minimal edits \u2014 no preset/target rename churn.\n\nDo not implement unit test bodies. verification_commands left empty.",
+  "acceptance_criteria": [
+    "Source/PluginProcessor.h/.cpp own MidSideRouter, SidechainAnalyzer, MaskingCarver, MonoGuard, and LookaheadDelay members prepared in prepareToPlay",
+    "processBlock performs stage-level MidSideRouter encode/decode once around the parametric/M-S stages; applies MaskingCarver only for enabled bands; runs MonoGuard protection only when enabled",
+    "LookaheadDelay mode is applied from parameters and AudioProcessor::setLatencySamples is called with LookaheadDelay::getLatencySamples() (0 when Off)",
+    "External sidechain bus is used when present and gracefully skipped in standalone / no-sidechain layouts",
+    "CMakeLists.txt lists MidSideRouter.cpp, SidechainAnalyzer.cpp, MaskingCarver.cpp, MonoGuard.cpp, LookaheadDelay.cpp, tests/MidSideTests.cpp, and tests/LookaheadTests.cpp on the correct targets",
+    "No heap allocation or mutex waits on the wired audio path; global bypass still silences module effects appropriately",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "antigravity_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/PluginProcessor.h",
+    "Source/PluginProcessor.cpp",
+    "CMakeLists.txt"
+  ],
+  "forbidden_changes": [
+    "rewrite Source/DSP/MidSideRouter.* core encode/decode algorithms",
+    "rewrite Source/DSP/SidechainAnalyzer.* or Source/DSP/MaskingCarver.* metric/carve algorithms",
+    "rewrite Source/DSP/MonoGuard.* coherence algorithms",
+    "rewrite Source/DSP/LookaheadDelay.* circular buffer algorithms",
+    "modify tests/MidSideTests.cpp or tests/LookaheadTests.cpp bodies (h.6 owns content)",
+    "modify Source/PluginEditor.*",
+    "modify Source/ParameterIDs.h",
+    "modify CMakePresets.json",
+    "add third-party dependencies",
+    "broad CMake restructure or rename plugin targets",
+    "hidden latency not reported via setLatencySamples",
+    "private inter-plugin sidechain IPC"
+  ],
+  "allowed_symbols": [
+    "ShredEQAudioProcessor",
+    "MidSideRouter",
+    "SidechainAnalyzer",
+    "MaskingCarver",
+    "MonoGuard",
+    "LookaheadDelay",
+    "prepareToPlay",
+    "releaseResources",
+    "processBlock",
+    "setLatencySamples",
+    "getBusBuffer",
+    "isBusesLayoutSupported",
+    "midSideRouter",
+    "sidechainAnalyzer",
+    "maskingCarver",
+    "monoGuard",
+    "lookaheadDelay"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "embed phase-H DSP modules by value on the processor",
+      "document one coherent processBlock order for lookahead \u2192 sidechain analyze \u2192 M/S wrap \u2192 mono guard \u2192 carve",
+      "append-only CMake target_sources for phase-H files and test stubs",
+      "skip sidechain analyzer when bus disabled or channel count zero"
+    ],
+    "forbidden": [
+      "GUI collision map / Mono Guard meter painting",
+      "unit test implementation",
+      "per-band M/S encode inside ParametricBand",
+      "unreported PDC latency"
+    ]
+  },
+  "dependencies": [
+    "h.1",
+    "h.2",
+    "h.3",
+    "h.4"
+  ],
+  "verification_commands": [],
+  "task_timeout_seconds": 900
+}

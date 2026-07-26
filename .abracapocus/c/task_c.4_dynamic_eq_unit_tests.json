@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "task_id": "c.4",
+  "phase": "C",
+  "phase_id": "c",
+  "title": "Dynamic EQ unit tests",
+  "description": "Add juce::UnitTest coverage for envelope ballistics, soft-knee gain, transient/sustain separation, and DynamicProcessor mode/detector behavior per SHREDEQ_SPEC.md \u00a74 and \u00a721.3.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- Source/DSP/EnvelopeFollower.*\n- Source/DSP/DynamicProcessor.*\n- Source/DSP/ParametricBand.* (optional integration smoke if public API allows)\n- tests/TestMain.cpp and existing tests/*Tests.cpp patterns\n- CMakeLists.txt as left by c.3 (DynamicEQTests.cpp should already be listed \u2014 do not edit CMake unless absolutely required and then only the unit-test source entry for this file)\n- .abracapocus/SHREDEQ_SPEC.md \u00a74.2\u20134.4 math and \u00a721.3 checklist\n\nImplement tests/DynamicEQTests.cpp:\n1. EnvelopeFollower: after a step input, faster attack reaches target sooner than slow attack; release decays after input drops; levelDb roughly tracks 20*log10 of steady envelope.\n2. Soft-knee: below knee far under threshold \u2192 ~0 dB gain change for downward compression; deep above threshold approaches (1-1/R)*u capped by D_max; mid-knee region is continuous between outer pieces (spot-check monotonicity).\n3. Transient/sustain: impulse-like burst yields transient > sustain initially; long steady tone yields sustain dominance with transient near 0 after settling.\n4. DynamicProcessor: staticEq mode \u2192 unity modulation; downwardDynamic/compression above threshold reduces gain (GR > 0 dB) within range cap; upward can increase when configured; transientOnly vs sustainOnly respond differently on burst vs sustained steady detector; sidechained mode uses external tap when provided.\n5. Optional light ParametricBand smoke: dynamics disabled path still processes; enabled dynamics changes effective output vs static for a synthetic detector \u2014 only if stable public API exists.\n6. Use juce::UnitTest; no Catch2/GoogleTest. Prefer public APIs; no production DSP rewrites.\n\nCMakeLists.txt is owned by c.3 \u2014 avoid editing it unless the test file is missing from ShredEQUnitTests, in which case append only tests/DynamicEQTests.cpp.",
+  "acceptance_criteria": [
+    "tests/DynamicEQTests.cpp exists and registers juce::UnitTest coverage for EnvelopeFollower and DynamicProcessor",
+    "Tests cover attack/release timing behavior and soft-knee threshold/knee/range interactions",
+    "Tests cover transient vs sustain separation behavior on burst vs steady signals",
+    "Tests assert staticEq unity modulation and non-unity gain reduction for downward/compression above threshold",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "pi_cli",
+  "model": "openrouter/z-ai/glm-5.2",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "tests/DynamicEQTests.cpp"
+  ],
+  "forbidden_changes": [
+    "modify Source/DSP/EnvelopeFollower.*",
+    "modify Source/DSP/DynamicProcessor.*",
+    "modify Source/DSP/ParametricBand.*",
+    "modify CMakeLists.txt except emergency single-line append of DynamicEQTests.cpp if missing",
+    "modify CMakePresets.json",
+    "modify Source/PluginProcessor.* or Source/PluginEditor.*",
+    "add Catch2/GoogleTest/third-party test frameworks",
+    "change production DSP algorithms solely to force green tests"
+  ],
+  "allowed_symbols": [
+    "DynamicEQTests",
+    "runTest",
+    "EnvelopeFollower",
+    "DynamicProcessor",
+    "computeSoftKneeGainDb"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "juce::UnitTest subclass in tests/DynamicEQTests.cpp",
+      "synthetic step/impulse/steady detector signals",
+      "optional ParametricBand smoke via public API only",
+      "tolerance-based float comparisons with explicit expect messages"
+    ],
+    "forbidden": [
+      "reimplement soft-knee math only inside tests without calling production helpers when available",
+      "plugin editor or processor wiring",
+      "broad CMake refactors"
+    ]
+  },
+  "dependencies": [
+    "c.1",
+    "c.2",
+    "c.3"
+  ],
+  "task_timeout_seconds": 900,
+  "verification_commands": []
+}

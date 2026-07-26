@@ -1,0 +1,62 @@
+{
+  "verification": {
+    "checks": [
+      {
+        "name": "phase_j_files_exist",
+        "command": [
+          "bash",
+          "-lc",
+          "test -f Source/UI/ShredEQLookAndFeel.h && test -f Source/UI/ShredEQLookAndFeel.cpp && test -f Source/UI/EQWorkspace.h && test -f Source/UI/EQWorkspace.cpp && test -f Source/UI/BandNode.h && test -f Source/UI/BandNode.cpp && test -f Source/UI/InspectorPanel.h && test -f Source/UI/InspectorPanel.cpp && test -f Source/UI/IntelligenceDrawer.h && test -f Source/UI/IntelligenceDrawer.cpp && test -f Source/PluginEditor.h && test -f Source/PluginEditor.cpp"
+        ]
+      },
+      {
+        "name": "cmake_lists_lists_phase_j_ui_sources",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"ShredEQLookAndFeel\\.cpp\" CMakeLists.txt && rg -q \"EQWorkspace\\.cpp\" CMakeLists.txt && rg -q \"BandNode\\.cpp\" CMakeLists.txt && rg -q \"InspectorPanel\\.cpp\" CMakeLists.txt && rg -q \"IntelligenceDrawer\\.cpp\" CMakeLists.txt && rg -q \"PluginEditor\\.cpp\" CMakeLists.txt"
+        ]
+      },
+      {
+        "name": "lookandfeel_v4_and_popup_signature",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"LookAndFeel_V4\" Source/UI/ShredEQLookAndFeel.h Source/UI/ShredEQLookAndFeel.cpp && rg -q \"drawPopupMenuItem\" Source/UI/ShredEQLookAndFeel.h Source/UI/ShredEQLookAndFeel.cpp && ! rg -q \"PopupMenu::Item\" Source/UI/ShredEQLookAndFeel.h Source/UI/ShredEQLookAndFeel.cpp"
+        ]
+      },
+      {
+        "name": "eq_workspace_bandnode_graph_interaction",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"frequencyToX|xToFrequency|log\" Source/UI/EQWorkspace.h Source/UI/EQWorkspace.cpp && rg -q \"gainToY|yToGain|24\" Source/UI/EQWorkspace.h Source/UI/EQWorkspace.cpp && rg -q \"mouseDrag|mouseDoubleClick|mouseWheelMove\" Source/UI/EQWorkspace.cpp Source/UI/BandNode.cpp && rg -q \"selected|bypass|dynamic|routing|stage\" Source/UI/BandNode.h Source/UI/BandNode.cpp"
+        ]
+      },
+      {
+        "name": "inspector_panel_band_params",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"setSelectedBand\" Source/UI/InspectorPanel.h Source/UI/InspectorPanel.cpp && rg -q \"frequency|Frequency|threshold|Threshold|attack|Attack|release|Release|bypass|Bypass|solo|Solo\" Source/UI/InspectorPanel.h Source/UI/InspectorPanel.cpp && rg -q \"AudioProcessorValueTreeState|Attachment\" Source/UI/InspectorPanel.h Source/UI/InspectorPanel.cpp"
+        ]
+      },
+      {
+        "name": "intelligence_drawer_modules",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"TightCut|Tight Cut|tightCut\" Source/UI/IntelligenceDrawer.h Source/UI/IntelligenceDrawer.cpp && rg -q \"Chug|chug\" Source/UI/IntelligenceDrawer.h Source/UI/IntelligenceDrawer.cpp && rg -q \"Resonance|resonance\" Source/UI/IntelligenceDrawer.h Source/UI/IntelligenceDrawer.cpp && rg -q \"Follower|follower|LockIn|Lock-In|Masking\" Source/UI/IntelligenceDrawer.h Source/UI/IntelligenceDrawer.cpp && rg -q \"setExpanded|isExpanded|expanded\" Source/UI/IntelligenceDrawer.h Source/UI/IntelligenceDrawer.cpp"
+        ]
+      },
+      {
+        "name": "plugin_editor_view_modes_size_layout",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"1360|820\" Source/PluginEditor.cpp Source/PluginEditor.h && rg -q \"980|620\" Source/PluginEditor.cpp Source/PluginEditor.h && rg -q \"setResizable|setResizeLimits\" Source/PluginEditor.cpp && rg -q \"Sculpt|Diagnose|Dynamics\" Source/PluginEditor.h Source/PluginEditor.cpp && rg -q \"EQWorkspace|InspectorPanel|IntelligenceDrawer|ShredEQLookAndFeel\" Source/PluginEditor.h Source/PluginEditor.cpp"
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "task_id": "g.3",
+  "phase": "G",
+  "phase_id": "g",
+  "title": "ResonanceSuppressor, scan workflow, processBlock wiring, CMakeLists",
+  "description": "Implement six ResonanceSuppressor dynamic-notch slots, scan workflow glue producing candidate cards, wire SpectralAnalysisEngine + ResonanceDetector + suppressor into PluginProcessor, and register phase-G sources in CMakeLists.txt. This task is the sole owner of PluginProcessor.* and CMakeLists.txt for phase G.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a78.5\u20138.7 (six suppressor nodes and controls; scan workflow; removed-signal audition y_removed = x - y_processed)\n- .abracapocus/SHREDEQ_SPEC.md \u00a718.5 (scan off audio thread; results via atomic/message-thread transfer)\n- .abracapocus/SHREDEQ_SPEC.md \u00a719.1 (default 0 samples latency for resonance suppression)\n- Source/Analysis/SpectralAnalysisEngine.* and AnalysisFifo.* public APIs from g.1 (read only except wiring includes)\n- Source/DSP/ResonanceDetector.* candidate API from g.2 (read only except wiring)\n- Source/DSP/PitchDetector.* latest f0 snapshot API from phase F (read only; feed detector)\n- Source/PluginProcessor.h/.cpp prepareToPlay/processBlock order from prior phases\n- Source/ParameterIDs.h resonance/scan related IDs if present (read only)\n- CMakeLists.txt target_sources patterns from phases B\u2013F (append only)\n\nImplement Source/DSP/ResonanceSuppressor.h and Source/DSP/ResonanceSuppressor.cpp:\n1. Exactly six suppressor slots (v1.0; comment expandable to eight in v1.1). Each slot: enable, center frequency 150 Hz\u201316 kHz, Q 3\u201340, max depth 0\u201318 dB, attack 0.5\u2013100 ms, release 20\u20132000 ms, persistence requirement 0\u2013100%, static vs dynamic mode, stereo placement, confidence, freeze, solo, removed-signal audition flags per \u00a78.5.\n2. Dynamic notch filters (modulation-stable TPT/biquad style consistent with existing project filters) or static notches; process stereo (or M/S placement where stereo placement requires) without heap in process().\n3. prepare/reset/processBlock-safe process: smoothed frequency/gain/Q; depth may follow detector activity/persistence in dynamic mode or hold fixed attenuation in static mode; freeze holds coefficients/depth.\n4. Solo and removed-signal audition: y_removed[n] = x[n] - y_processed[n] availability for selected slots / module-level audition without breaking dry path when disabled.\n5. applyCandidate / loadFromCandidate helpers to create dynamic or static notch from a ResonanceCandidate (bounds clamp depth/Q/freq).\n6. True bypass when module or all slots disabled \u2014 no residual notches.\n\nScan workflow (in Suppressor and/or thin processor-owned helper still within allowed files):\n1. User Scan: begin scan for configurable duration; analysis continues off audio thread via existing engine/detector; on end, expose candidate cards for audition/reject/create dynamic notch/create static notch/reduce depth/classify intentional/exclusion-list hooks (data structures + APIs; full GUI later).\n2. Never auto-apply notches to the audible path until an explicit apply/accept API is invoked.\n3. Bounded card list fixed max; rejection/exclusion stored in fixed-capacity containers.\n\nWire Source/PluginProcessor.h/.cpp:\n1. Own SpectralAnalysisEngine (+ ensure AnalysisFifo path), ResonanceDetector, ResonanceSuppressor members (by value preferred).\n2. prepareToPlay/releaseResources/reset: prepare all three; start/stop analyzer thread with engine enabled state; no audio-thread FFT planning.\n3. processBlock: push audio (and optional sidechain tap storage if already available) into AnalysisFifo; feed PitchDetector f0 snapshot into ResonanceDetector on a control tick or message-adjacent path already used for pitch; run ResonanceSuppressor on the audible path at zero added latency; honor global bypass and module enable.\n4. Drive scan begin/end from parameters/flags if ParameterIDs already define them; otherwise expose clear processor methods for future UI without inventing host automation spam.\n5. Document insertion point relative to existing TightCut / Chug / parametric / multiband stages; choose one coherent position for suppressor (typically late correction stage after main tone EQ unless IDs dictate otherwise).\n\nCMakeLists.txt:\n1. Append Source/Analysis/AnalysisFifo.cpp, Source/Analysis/SpectralAnalysisEngine.cpp, Source/DSP/ResonanceDetector.cpp, Source/DSP/ResonanceSuppressor.cpp to plugin/DSP targets.\n2. Append tests/ResonanceTests.cpp to the test target (g.4 owns test body).\n3. Append-only minimal edits \u2014 no preset/target rename churn.\n\nDo not implement unit test bodies. verification_commands left empty.",
+  "acceptance_criteria": [
+    "Source/DSP/ResonanceSuppressor.h and Source/DSP/ResonanceSuppressor.cpp exist with six suppressor slots exposing \u00a78.5 controls (freq, Q, depth, attack, release, persistence, static/dynamic, placement, freeze, solo, audition)",
+    "ResonanceSuppressor process applies bounded dynamic/static notches with smoothed parameters, true bypass when disabled, and removed-signal audition support y_removed = x - y_processed",
+    "Scan workflow APIs accumulate ResonanceDetector candidates off the audio thread and never audible-apply notches until explicit accept/apply",
+    "Source/PluginProcessor.h/.cpp own SpectralAnalysisEngine, ResonanceDetector, and ResonanceSuppressor; push audio to the analysis FIFO from processBlock; run suppressor on the audible path at zero added latency; feed PitchDetector f0 into the detector path",
+    "CMakeLists.txt lists AnalysisFifo.cpp, SpectralAnalysisEngine.cpp, ResonanceDetector.cpp, ResonanceSuppressor.cpp, and tests/ResonanceTests.cpp on the correct targets",
+    "No heap allocation / mutex waits / FFT on the audio thread in the wired path",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "antigravity_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/DSP/ResonanceSuppressor.h",
+    "Source/DSP/ResonanceSuppressor.cpp",
+    "Source/PluginProcessor.h",
+    "Source/PluginProcessor.cpp",
+    "CMakeLists.txt"
+  ],
+  "forbidden_changes": [
+    "rewrite Source/Analysis/SpectralAnalysisEngine.* STFT algorithms",
+    "rewrite Source/Analysis/AnalysisFifo.* ring algorithms",
+    "rewrite Source/DSP/ResonanceDetector.* scoring algorithms",
+    "rewrite Source/DSP/PitchDetector.* YIN algorithm",
+    "modify tests/ResonanceTests.cpp body (g.4 owns content)",
+    "modify Source/PluginEditor.*",
+    "modify Source/ParameterIDs.h",
+    "modify CMakePresets.json",
+    "add third-party dependencies",
+    "broad CMake restructure or rename plugin targets",
+    "enable auto-apply of scan candidates without explicit accept API",
+    "introduce non-zero default latency for resonance suppression"
+  ],
+  "allowed_symbols": [
+    "ResonanceSuppressor",
+    "SuppressorSlot",
+    "SpectralAnalysisEngine",
+    "ResonanceDetector",
+    "ResonanceCandidate",
+    "ShredEQAudioProcessor",
+    "prepare",
+    "reset",
+    "process",
+    "prepareToPlay",
+    "releaseResources",
+    "processBlock",
+    "beginScan",
+    "endScan",
+    "applyCandidate",
+    "setSlotEnabled",
+    "setRemovedAudition",
+    "pushAudio",
+    "resonanceSuppressor",
+    "spectralAnalysisEngine",
+    "resonanceDetector"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "embed engine/detector/suppressor by value on the processor",
+      "reuse existing project TPT or biquad notch building blocks inside suppressor slots",
+      "control-rate detector tick from processor timer/callback or engine thread completion hook",
+      "append-only CMake target_sources for phase-G files",
+      "explicit applyCandidate path only for audible notches"
+    ],
+    "forbidden": [
+      "GUI Resonance Scan panel implementation",
+      "heap allocate per block for notches or candidates",
+      "unit test implementation",
+      "percentile cloud / headroom histogram full GUI analyzers (later phases)",
+      "auto-engage all scan candidates into slots without user apply"
+    ]
+  },
+  "dependencies": [
+    "g.1",
+    "g.2"
+  ],
+  "verification_commands": [],
+  "task_timeout_seconds": 900
+}

@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "task_id": "d.3",
+  "phase": "D",
+  "phase_id": "d",
+  "title": "PluginProcessor wiring and CMakeLists for TightCut and ChugStabilizer",
+  "description": "Wire TightCut and ChugStabilizer into PluginProcessor between input conditioning and parametric Stage A, and register phase-D sources in CMakeLists.txt. This task is the sole owner of PluginProcessor.* and CMakeLists.txt for phase D.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- Source/PluginProcessor.h/.cpp processBlock/prepareToPlay structure from prior phases\n- Source/DSP/TightCut.h and Source/DSP/ChugStabilizer.h public APIs from d.1/d.2\n- Source/ParameterIDs.h tightCut_* and chug_* parameter IDs\n- CMakeLists.txt target_sources patterns from phases B/C\n- .abracapocus/SHREDEQ_SPEC.md signal flow (\u00a7 intro / \u00a76 placement): input conditioning \u2192 Tight Cut \u2192 Chug Stabilizer \u2192 parametric Stage A\n\nImplement wiring in Source/PluginProcessor.h/.cpp:\n1. Own TightCut and ChugStabilizer members; prepare/reset in prepareToPlay/releaseResources; no heap in processBlock.\n2. processBlock order after input gain/conditioning and before parametric Stage A / main EQ chain: optional Tight Cut (honor pre/post placement if exposure exists \u2014 default pre-EQ as spec flow), then Chug Stabilizer, then existing Stage A path.\n3. Push APVTS parameters each block (or smooth) into module setters using ParameterIDs for enable, frequencies, slopes/Q, punch, listen, routing, chug threshold/ballistics/Preserve Pick, etc. Disabled modules must be true bypass (bit-transparent or equivalent neutral path).\n4. Respect global bypass: modules skipped when global bypass engaged consistent with existing processor behavior.\n5. Do not redesign bus layout, StateManager, or editor; only DSP member integration and parameter read.\n6. CMakeLists.txt: add Source/DSP/TightCut.cpp, Source/DSP/ChugStabilizer.cpp, tests/TightCutTests.cpp, and tests/ChugStabilizerTests.cpp to the correct plugin/DSP and ShredEQUnitTests source lists using existing style. No unrelated target refactors.\n\nDo NOT implement unit test bodies (d.4 owns tests) or change TightCut/ChugStabilizer algorithms beyond include/member use.",
+  "acceptance_criteria": [
+    "Source/PluginProcessor.h/.cpp own TightCut and ChugStabilizer instances prepared in prepareToPlay",
+    "processBlock runs Tight Cut then Chug Stabilizer after input conditioning and before parametric Stage A when enabled",
+    "APVTS tightCut_* and chug_* parameters are applied to the corresponding DSP setters",
+    "Disabled modules and global bypass do not force permanent filtering when modules are off",
+    "CMakeLists.txt lists Source/DSP/TightCut.cpp, Source/DSP/ChugStabilizer.cpp, tests/TightCutTests.cpp, and tests/ChugStabilizerTests.cpp on the correct targets",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "antigravity_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/PluginProcessor.h",
+    "Source/PluginProcessor.cpp",
+    "CMakeLists.txt"
+  ],
+  "forbidden_changes": [
+    "rewrite Source/DSP/TightCut.* algorithms",
+    "rewrite Source/DSP/ChugStabilizer.* algorithms",
+    "modify tests/TightCutTests.cpp or tests/ChugStabilizerTests.cpp bodies (d.4 owns content)",
+    "modify Source/PluginEditor.*",
+    "modify Source/ParameterIDs.h",
+    "modify CMakePresets.json",
+    "add third-party dependencies",
+    "broad CMake restructure or rename plugin targets"
+  ],
+  "allowed_symbols": [
+    "ShredEQAudioProcessor",
+    "TightCut",
+    "ChugStabilizer",
+    "prepareToPlay",
+    "releaseResources",
+    "processBlock",
+    "tightCut",
+    "chugStabilizer"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "embed TightCut and ChugStabilizer by value on the processor",
+      "parameter snapshot helper local to processBlock",
+      "append phase-D sources to existing CMake lists only",
+      "true bypass when module disabled"
+    ],
+    "forbidden": [
+      "GUI view implementation",
+      "multiband engine wiring",
+      "change bus sidechain topology",
+      "heap allocate DSP per block"
+    ]
+  },
+  "dependencies": [
+    "d.1",
+    "d.2"
+  ],
+  "task_timeout_seconds": 900,
+  "verification_commands": []
+}

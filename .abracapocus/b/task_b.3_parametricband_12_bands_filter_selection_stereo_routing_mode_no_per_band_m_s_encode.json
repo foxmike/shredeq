@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "task_id": "b.3",
+  "phase": "B",
+  "phase_id": "b",
+  "title": "ParametricBand \u2014 12 bands, filter selection, stereo routing mode (no per-band M/S encode)",
+  "description": "Implement the parametric band engine that wraps static biquad cascades and/or TPT for up to 12 independent bands.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- Source/DSP/BiquadCoefficients.h/.cpp (cascade design API)\n- Source/DSP/TPTFilter.h/.cpp (modulation-stable path)\n- .abracapocus/SHREDEQ_SPEC.md \u00a73.1\u20133.5 (band capabilities, ranges, stereo placement rules)\n- Source/ParameterIDs.h if present (band parameter naming only; do not edit)\n\nImplement Source/DSP/ParametricBand.h and Source/DSP/ParametricBand.cpp:\n1. A single-band class holding: enabled/bypass, stageA/B assignment enum, frequency, gain, Q, filter type, slope, stereo routing MODE (linked, unlinked, left, right, mid, side).\n2. CRITICAL: Bands do NOT perform their own M/S encoding/decoding. process() receives channels already in the domain the stage router chose; routing mode selects which channel(s) the band filters (e.g. only left, only right, both as linked dual-mono, or pass-through for wrong domain). Document that mid/side encoding is owned by a later stage router.\n3. Topology selection: static/semi-static paths use BiquadCoefficients cascade (with slope-driven section counts); continuously modulated paths may use TPTFilter. Provide an explicit setUseTpt(bool) or auto policy based on modulation flag.\n4. juce::SmoothedValue (or equivalent) for frequency/gain/Q or output applied gain so coefficient updates and gain ramps do not click. No heap allocation in process methods. Direct-form II transposed or DF1 section state stored in fixed arrays sized for max slope cascade.\n5. A container type ParametricEQ or fixed std::array of 12 ParametricBand instances with prepare/reset/process for the cascade of enabled bands (order stable). Dynamics/detector hooks can be stubbed as future setters without implementing full dynamic EQ this phase.\n6. Keep public getters for response magnitude contribution parameters so ResponseComputer can read band settings.\n\nDo NOT edit CMakeLists.txt, ResponseComputer, tests, or perform stage M/S matrix work.",
+  "acceptance_criteria": [
+    "Source/DSP/ParametricBand.h and Source/DSP/ParametricBand.cpp exist",
+    "ParametricBand stores enabled, stage A/B, frequency, gain, Q, type, slope, and stereo routing mode",
+    "Stereo routing mode selects channel participation without per-band M/S encode/decode",
+    "Band processing uses BiquadCoefficients cascade and/or TPTFilter with juce::SmoothedValue and no heap allocation in process methods",
+    "A 12-band container or fixed array API exists for the parametric system",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "antigravity_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/DSP/ParametricBand.h",
+    "Source/DSP/ParametricBand.cpp"
+  ],
+  "forbidden_changes": [
+    "modify CMakeLists.txt or CMakePresets.json",
+    "modify Source/DSP/BiquadCoefficients.* beyond includes from ParametricBand",
+    "rewrite TPTFilter/BiquadCoefficients implementations",
+    "modify Source/DSP/ResponseComputer.*",
+    "modify tests/**",
+    "modify Source/PluginProcessor.* or Source/PluginEditor.*",
+    "implement energy-normalized M/S encode/decode inside ParametricBand",
+    "implement full dynamic EQ detector/envelope (defer to later phases)",
+    "add third-party dependencies"
+  ],
+  "allowed_symbols": [
+    "ParametricBand",
+    "ParametricEQ",
+    "StereoRoutingMode",
+    "BandStage",
+    "prepare",
+    "reset",
+    "process",
+    "setEnabled",
+    "setFrequency",
+    "setGainDb",
+    "setQ",
+    "setFilterType",
+    "setSlope",
+    "setRoutingMode",
+    "setUseTpt",
+    "kNumParametricBands"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "fixed 12-band array wrapper named ParametricEQ or similar",
+      "choose DF1/TDF2 for biquad section state with fixed max sections",
+      "stub dynamic-mode fields without full detector implementation",
+      "routing mode acts as channel mask on pre-routed buffers"
+    ],
+    "forbidden": [
+      "own CMakeLists.txt target_sources",
+      "per-band M/S matrix using 1/sqrt(2)",
+      "wide GUI or plugin processor wiring",
+      "heap allocate section state in process"
+    ]
+  },
+  "dependencies": [
+    "b.1",
+    "b.2"
+  ],
+  "task_timeout_seconds": 900,
+  "verification_commands": []
+}

@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "task_id": "a.4",
+  "phase": "A",
+  "phase_id": "a",
+  "title": "gitignore, README, TestMain.cpp",
+  "description": "Project hygiene and unit-test entrypoint only.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- Existing .gitignore and README.md in repo root (already partial)\n- /home/mike/dev/mike/music/plugins/shredboost/.gitignore\n- /home/mike/dev/mike/music/plugins/shredboost/tests/TestMain.cpp\n- /home/mike/dev/mike/music/plugins/shredboost/README.md if present\n\nImplement:\n1. .gitignore \u2014 ensure entries for: build/, cmake-build-*, state/, .abracapocus/state/, .abracapocus/logs/, .abracapocus/reports/ (keep/merge existing IDE, OS, and binary ignores; do not remove useful existing rules).\n2. README.md \u2014 ShredEQ title, one-paragraph product summary (zero-latency adaptive parametric/dynamic/multiband EQ for guitar/bass; C++20/JUCE; VST3 + Standalone), build instructions (git submodule update --init --recursive; cmake --preset ...; scripts/build_all.sh), company nSpace Systems, pointer that full spec lives in SHREDEQ_SPEC.md / .abracapocus if applicable.\n3. tests/TestMain.cpp \u2014 juce::UnitTestRunner console main mirroring ShredBoost: ScopedJuceInitialiser_GUI, runAllTests, sum failures, return non-zero on failure. No product tests required yet.\n\nDo NOT touch CMake, Source/*, or submodules.",
+  "acceptance_criteria": [
+    ".gitignore contains build/, cmake-build-*, state/, .abracapocus/state/, .abracapocus/logs/, and .abracapocus/reports/",
+    "README.md describes ShredEQ, VST3 + Standalone, and basic cmake/preset or scripts/build_all.sh build steps",
+    "tests/TestMain.cpp exists and runs juce::UnitTestRunner::runAllTests with non-zero exit on failures",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "pi_cli",
+  "model": "openrouter/google/gemma-4-31b-it",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    ".gitignore",
+    "README.md",
+    "tests/TestMain.cpp"
+  ],
+  "forbidden_changes": [
+    "modify CMakeLists.txt or CMakePresets.json",
+    "modify Source/**",
+    "modify scripts/**",
+    "modify .gitmodules",
+    "add third-party test frameworks"
+  ],
+  "allowed_symbols": [
+    "main"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "merge ignore rules with existing .gitignore",
+      "mirror ShredBoost TestMain pattern",
+      "document submodule + preset build flow in README"
+    ],
+    "forbidden": [
+      "rename project branding away from ShredEQ / nSpace Systems",
+      "implement unit tests beyond the runner entrypoint",
+      "change plugin source or build metadata"
+    ]
+  },
+  "dependencies": [],
+  "task_timeout_seconds": 600,
+  "verification_commands": []
+}

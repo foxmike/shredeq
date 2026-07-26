@@ -1,0 +1,38 @@
+{
+  "verification": {
+    "checks": [
+      {
+        "name": "scaffold_files_exist",
+        "command": [
+          "bash",
+          "-lc",
+          "test -f CMakeLists.txt && test -f CMakePresets.json && test -f scripts/build_all.sh && test -f Source/ParameterIDs.h && test -f Source/PluginProcessor.cpp && test -f Source/PluginProcessor.h && test -f Source/StateManager.cpp && test -f Source/StateManager.h && test -f Source/PluginEditor.cpp && test -f Source/PluginEditor.h && test -f tests/TestMain.cpp && test -f README.md && test -f .gitignore"
+        ]
+      },
+      {
+        "name": "cmake_configure_only",
+        "command": [
+          "bash",
+          "-lc",
+          "cmake -S . -B build/phase-a-configure -DSHREDEQ_CONFIGURE_ONLY=ON"
+        ]
+      },
+      {
+        "name": "parameter_ids_inventory_grep",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"inputGain|outputGain|globalBypass|tightCut|chug|lookahead|schema\" Source/ParameterIDs.h Source/StateManager.h Source/PluginProcessor.cpp && rg -q \"band1_|band12_|res1_|res6_\" Source/ParameterIDs.h"
+        ]
+      },
+      {
+        "name": "gitignore_required_entries",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"build/\" .gitignore && rg -q \"cmake-build\" .gitignore && rg -q \"\\.abracapocus/state\" .gitignore && rg -q \"\\.abracapocus/logs\" .gitignore && rg -q \"\\.abracapocus/reports\" .gitignore"
+        ]
+      }
+    ]
+  }
+}

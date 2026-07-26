@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "task_id": "g.4",
+  "phase": "G",
+  "phase_id": "g",
+  "title": "Resonance detection and suppression tests",
+  "description": "Add juce::UnitTest coverage for SpectralAnalysisEngine, ResonanceDetector, and ResonanceSuppressor per SHREDEQ_SPEC.md \u00a78 and \u00a721.6.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- Source/Analysis/SpectralAnalysisEngine.* and AnalysisFifo.* public APIs from g.1\n- Source/DSP/ResonanceDetector.* candidate/persistence APIs from g.2\n- Source/DSP/ResonanceSuppressor.* slot/process/audition APIs from g.3\n- Source/DSP/PitchDetector.* f0 snapshot API (for harmonic-rejection cases)\n- tests/TestMain.cpp and existing tests/*Tests.cpp patterns (phases B\u2013F)\n- CMakeLists.txt as left by g.3 (tests/ResonanceTests.cpp should already be listed \u2014 do not edit CMake unless the entry is missing)\n- .abracapocus/SHREDEQ_SPEC.md \u00a78.2\u20138.7 and \u00a721.6 (fixed sine resonances, moving harmonics, pink-noise peaks, scan does not auto-modify sound)\n\nImplement tests/ResonanceTests.cpp:\n1. SpectralAnalysisEngine/AnalysisFifo: push a steady sine (e.g. 1 kHz) through prepare + enough frames; latest spectrum shows a clear peak near the expected bin within documented tolerance; drop/skip-frame counters remain finite; disabled engine stops advancing expensive work (or at least remains safe to call).\n2. ResonanceDetector + fixed narrow excess: inject/synthesize spectrum or audio with a fixed high-Q tone (e.g. ~4.2\u20134.35 kHz) over noise \u2192 candidate list contains a near-frequency high-confidence persistent peak after persistence builds.\n3. Harmonic rejection: with PitchDetector.f0 (or injected f0) set so a peak sits on m*f0 and tracks note changes, candidate confidence is lower than an equal-level fixed off-harmonic peak present across different f0 values (assert ordering or threshold relationship, not sample-identical audio).\n4. Scan workflow: beginScan/endScan (or equivalent) produces bounded cards; detector/suppressor path does not alter process() output until applyCandidate/explicit enable on a slot (bit-identical or near-identical dry vs unapplied path within float tolerance).\n5. ResonanceSuppressor: enabling a static notch at a known sine frequency reduces output energy at that frequency vs bypass; depth/Q clamps respect 0\u201318 dB and Q 3\u201340 bounds; removed-signal audition energy is elevated when notch is deep (optional if API exposes wet/removed buffers).\n6. Six slots constructible/settable; out-of-range frequency/Q/depth inputs clamp safely to finite coefficients.\n7. Use juce::UnitTest; no new third-party test frameworks. Do not rewrite production DSP solely to force green tests \u2014 only assert documented tolerances.\n\nverification_commands left empty \u2014 C++ adapter infers cmake/ctest.",
+  "acceptance_criteria": [
+    "tests/ResonanceTests.cpp exists and registers juce::UnitTest coverage for SpectralAnalysisEngine/AnalysisFifo, ResonanceDetector, and ResonanceSuppressor",
+    "Steady-sine spectrum path asserts a peak near the expected FFT bin within documented tolerance",
+    "Fixed narrow excess yields a high-confidence persistent candidate; f0-linked harmonic peaks are down-weighted relative to fixed off-harmonic peaks",
+    "Unapplied scan/detector path does not modify suppressor audio until explicit apply/enable; applied static notch attenuates a target sine versus bypass",
+    "Slot parameter clamps (freq/Q/depth) and six-slot presence are asserted with finite safe behavior",
+    "No production DSP algorithm rewrites solely to force green tests",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "pi_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "tests/ResonanceTests.cpp"
+  ],
+  "forbidden_changes": [
+    "modify Source/Analysis/SpectralAnalysisEngine.*",
+    "modify Source/Analysis/AnalysisFifo.*",
+    "modify Source/DSP/ResonanceDetector.*",
+    "modify Source/DSP/ResonanceSuppressor.*",
+    "modify Source/DSP/PitchDetector.*",
+    "modify Source/PluginProcessor.*",
+    "modify CMakeLists.txt except emergency single-line append of missing ResonanceTests.cpp",
+    "modify CMakePresets.json",
+    "modify Source/PluginEditor.*",
+    "add Catch2/GoogleTest/third-party test frameworks",
+    "change production DSP algorithms solely to force green tests"
+  ],
+  "allowed_symbols": [
+    "ResonanceTests",
+    "runTest",
+    "SpectralAnalysisEngine",
+    "AnalysisFifo",
+    "ResonanceDetector",
+    "ResonanceSuppressor",
+    "ResonanceCandidate",
+    "PitchDetector",
+    "SuppressorSlot"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "juce::UnitTest subclass in tests/ResonanceTests.cpp",
+      "synthetic sines, noise, and simple multi-frame spectrum fixtures",
+      "relative bin/Hz and confidence-ordering tolerances",
+      "emergency CMake one-line append only if test source missing from target"
+    ],
+    "forbidden": [
+      "processor/editor UI wiring tests as host integration",
+      "broad CMake refactors",
+      "pluginval or DAW host runs inside this unit test",
+      "requiring sample-identical FFT bit patterns across platforms"
+    ]
+  },
+  "dependencies": [
+    "g.1",
+    "g.2",
+    "g.3"
+  ],
+  "verification_commands": [],
+  "task_timeout_seconds": 900,
+  "model": "openrouter/z-ai/glm-5.2"
+}

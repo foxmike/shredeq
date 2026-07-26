@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "task_id": "a.1",
+  "phase": "A",
+  "phase_id": "a",
+  "title": "CMakeLists.txt, CMakePresets.json, build scripts, JUCE submodule",
+  "description": "Create the ShredEQ CMake/JUCE project scaffold only (no DSP, no parameter inventory, no state engine).\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- /home/mike/dev/mike/music/plugins/shredboost/CMakeLists.txt (known-working juce_add_plugin, company/manufacturer codes, configure-only option, binary-data, unit-test target patterns)\n- /home/mike/dev/mike/music/plugins/shredspace/CMakeLists.txt (COPY_PLUGIN_AFTER_BUILD, FORMATS, NEEDS_MIDI_* flags)\n- /home/mike/dev/mike/music/plugins/shredboost/CMakePresets.json\n- /home/mike/dev/mike/music/plugins/shredboost/scripts/build_all.sh\n- .abracapocus/SHREDEQ_SPEC.md (product name, formats)\n\nImplement:\n1. CMakeLists.txt\n   - cmake_minimum_required(VERSION 3.22); project(ShredEQ VERSION 1.0.0 LANGUAGES C CXX); CMAKE_CXX_STANDARD 20 REQUIRED.\n   - SHREDEQ_CONFIGURE_ONLY option that returns early without requiring JUCE (mirror ShredBoost).\n   - FATAL_ERROR if JUCE/CMakeLists.txt is missing when not configure-only; add_subdirectory(JUCE).\n   - juce_add_plugin(ShredEQ) with: PRODUCT_NAME ShredEQ; COMPANY_NAME \"nSpace Systems\"; VERSION 1.0.0; PLUGIN_MANUFACTURER_CODE NSPC; PLUGIN_CODE ShEq; BUNDLE_ID com.nspacesystems.shredeq; FORMATS VST3 Standalone (no LV2 unless already standard in sibling pins\u2014follow phase goal: VST3 + Standalone); IS_SYNTH FALSE; NEEDS_MIDI_INPUT TRUE; NEEDS_MIDI_OUTPUT FALSE; COPY_PLUGIN_AFTER_BUILD FALSE.\n   - target_sources PRIVATE listing Source/PluginProcessor.cpp and Source/PluginEditor.cpp only for now (placeholders may be created by later tasks; list the paths so the graph is ready).\n   - target_compile_definitions: JUCE_WEB_BROWSER=0, JUCE_USE_CURL=0, JUCE_VST3_CAN_REPLACE_VST2=0.\n   - target_link_libraries: juce_audio_utils, juce_dsp + recommended config/lto/warning flags (same pattern as ShredBoost).\n   - enable_testing() and a minimal ShredEQUnitTests executable stub that compiles tests/TestMain.cpp plus the same processor/editor sources and links the same JUCE libs (do not add extra test .cpp files yet).\n   - Do not add juce_add_binary_data yet unless a stub Resources path already exists; leave a short commented TODO for factory presets.\n2. CMakePresets.json\n   - version 3; cmakeMinimumRequired 3.22.0.\n   - configurePresets: RelWithDebInfo preset named appropriately (e.g. linux-relwithdebinfo) with Unix Makefiles, binaryDir build/linux-relwithdebinfo, CMAKE_BUILD_TYPE RelWithDebInfo.\n   - Matching buildPresets and testPresets referencing that configure preset.\n   - Optional Release configure preset (linux-release) for parity with ShredBoost is allowed.\n3. scripts/build_all.sh\n   - set -euo pipefail; configure with the RelWithDebInfo (or linux-release) preset; cmake --build; echo completion. Executable bit is nice-to-have via script content/shebang only.\n4. .gitmodules\n   - Add JUCE as a git submodule entry pointing at the same upstream used by ShredBoost/ShredSpace if known; path JUCE. Document in a short comment at top of CMakeLists how to populate: git submodule update --init --recursive. Do not require network success inside acceptance if submodule clone fails offline\u2014file content and paths must still be correct.\n\nDo NOT create Source/* processor/editor bodies, ParameterIDs, StateManager, README, .gitignore, or tests/TestMain.cpp in this task.",
+  "acceptance_criteria": [
+    "CMakeLists.txt exists and defines project(ShredEQ) with CMAKE_CXX_STANDARD 20",
+    "CMakeLists.txt juce_add_plugin sets COMPANY_NAME nSpace Systems, PLUGIN_MANUFACTURER_CODE NSPC, PLUGIN_CODE ShEq, BUNDLE_ID com.nspacesystems.shredeq, FORMATS including VST3 and Standalone, NEEDS_MIDI_INPUT TRUE",
+    "CMakeLists.txt provides SHREDEQ_CONFIGURE_ONLY early-return option and checks for JUCE/CMakeLists.txt",
+    "CMakePresets.json exists with a RelWithDebInfo (or equivalent) configure preset and matching build/test presets",
+    "scripts/build_all.sh exists, uses set -euo pipefail, and invokes cmake --preset then cmake --build",
+    ".gitmodules lists path JUCE",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "codex_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "CMakeLists.txt",
+    "CMakePresets.json",
+    "scripts/build_all.sh",
+    ".gitmodules"
+  ],
+  "forbidden_changes": [
+    "modify Source/**",
+    "modify tests/**",
+    "modify README.md or .gitignore",
+    "add third-party dependencies other than the JUCE submodule entry",
+    "enable LV2 unless required by matching both sibling plugins and SHREDEQ_SPEC for v1 scaffold \u2014 prefer VST3+Standalone only",
+    "implement DSP, parameters, or state persistence"
+  ],
+  "allowed_symbols": [
+    "ShredEQ",
+    "SHREDEQ_CONFIGURE_ONLY",
+    "ShredEQUnitTests"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "mirror ShredBoost/ShredSpace CMake conventions with ShredEQ naming",
+      "add RelWithDebInfo preset plus optional Release preset",
+      "list PluginProcessor.cpp and PluginEditor.cpp as target_sources for later tasks",
+      "stub unit-test executable linking processor/editor sources"
+    ],
+    "forbidden": [
+      "invent a different company or manufacturer code than nSpace Systems / NSPC",
+      "add full parameter or DSP source lists beyond processor/editor",
+      "require network during acceptance",
+      "change repository-wide tooling unrelated to ShredEQ scaffold"
+    ]
+  },
+  "dependencies": [],
+  "task_timeout_seconds": 900,
+  "verification_commands": []
+}

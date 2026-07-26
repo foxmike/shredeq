@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "task_id": "b.1",
+  "phase": "B",
+  "phase_id": "b",
+  "title": "BiquadCoefficients \u2014 all RBJ types, first-order and second-order sections, cascaded slopes",
+  "description": "Implement the pure coefficient/section library for ShredEQ parametric filters (no audio process loop ownership beyond coefficient math helpers).\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a73.2\u20133.6 (filter types, ranges, RBJ peaking formulas, cascade magnitude)\n- .abracapocus/PLAN_SKELETON.json phase b goal (slope section counts)\n- Sibling filter patterns at /home/mike/dev/mike/music/plugins/shredboost/Source/DSP/ToneFilter.h and MidVoicingFilter.h for JUCE style (read only)\n\nImplement Source/DSP/BiquadCoefficients.h and Source/DSP/BiquadCoefficients.cpp:\n1. Enums/types for filter kinds used by parametric bands: bell/peak, notch, lowShelf, highShelf, lowPass, highPass, bandPass, tilt, resonantHighPass, resonantLowPass (flat-dynamic can be represented as bypass/unity coeffs).\n2. RBJ Audio EQ Cookbook coefficient generation for second-order sections (normalize by a0). First-order LP/HP/shelf sections where needed for 6 dB/oct building blocks.\n3. Slope cascade builders producing an ordered list/array of first-order and second-order sections with fixed max depth, no heap in audio-rate paths:\n   - 6 dB/oct = one first-order\n   - 12 dB/oct = one biquad\n   - 18 dB/oct = first-order + biquad\n   - 24 dB/oct = two biquads\n   - 36 dB/oct = three biquads\n   - 48 dB/oct = four biquads\n4. Provide magnitude (and optional complex H) evaluation for a single section and a cascade at a frequency so ResponseComputer/tests can share the math. Use standard digital RBJ formulas for v1.0; do not claim arbitrary analog matching near Nyquist.\n5. Parameter sanity clamps aligned with spec ranges where coefficients are computed (f, Q, gain, fs). Document Nyquist limitations in brief header comments.\n6. No juce::AudioBuffer processing API here beyond coefficient helpers; keep the API header-only-friendly or thin .cpp. Prefer POD coefficient structs and span/array section storage with a compile-time max section count (\u22654 second-order + 1 first-order).\n\nDo NOT create ParametricBand, TPTFilter, ResponseComputer, tests, or edit CMakeLists.txt.",
+  "acceptance_criteria": [
+    "Source/DSP/BiquadCoefficients.h and Source/DSP/BiquadCoefficients.cpp exist",
+    "BiquadCoefficients provides RBJ second-order coefficient generation for bell, notch, low/high shelf, LP, HP, BP (and tilt or resonant variants as documented)",
+    "First-order sections exist and slope cascade builders map 6/12/18/24/36/48 dB/oct to the section counts in the phase goal",
+    "Section or cascade magnitude evaluation API exists for shared response math",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "codex_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/DSP/BiquadCoefficients.h",
+    "Source/DSP/BiquadCoefficients.cpp"
+  ],
+  "forbidden_changes": [
+    "modify CMakeLists.txt or CMakePresets.json",
+    "modify Source/DSP/TPTFilter.*",
+    "modify Source/DSP/ParametricBand.*",
+    "modify Source/DSP/ResponseComputer.*",
+    "modify tests/**",
+    "modify Source/PluginProcessor.* or Source/PluginEditor.*",
+    "add third-party dependencies",
+    "allocate heap inside coefficient design hot paths meant for audio-thread use"
+  ],
+  "allowed_symbols": [
+    "BiquadCoefficients",
+    "BiquadSection",
+    "FirstOrderSection",
+    "FilterType",
+    "FilterSlope",
+    "designPeak",
+    "designLowPass",
+    "designHighPass",
+    "designLowShelf",
+    "designHighShelf",
+    "designNotch",
+    "designBandPass",
+    "designCascade",
+    "magnitudeDb",
+    "complexResponse"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "use standard RBJ cookbook formulas with a0 normalization",
+      "fixed-capacity section array with max cascade depth for 48 dB/oct",
+      "namespace under shred or anonymous detail helpers in .cpp",
+      "document Nyquist accuracy limits instead of analog-matched marketing claims"
+    ],
+    "forbidden": [
+      "implement full ParametricBand processBlock",
+      "implement TPT SVF topology",
+      "own CMake target lists",
+      "claim arbitrary analog matching near Nyquist without measurement path"
+    ]
+  },
+  "dependencies": [],
+  "task_timeout_seconds": 900,
+  "verification_commands": []
+}

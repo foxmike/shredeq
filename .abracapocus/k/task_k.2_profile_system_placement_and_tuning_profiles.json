@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "task_id": "k.2",
+  "phase": "K",
+  "phase_id": "k",
+  "title": "Profile system \u2014 placement and tuning profiles",
+  "description": "Implement the placement + tuning profile system per SHREDEQ_SPEC.md \u00a715. Profiles change defaults, analyzer weighting, labels, and recommended ranges \u2014 they must not impose hidden processing.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a715.1 placement profiles (Guitar DI / Pre-Amp, Post Amp / Cab, Rhythm Guitar, Lead Guitar, Stereo Guitar Bus, Active Bass, Distorted Bass)\n- .abracapocus/SHREDEQ_SPEC.md \u00a715.2 tuning profiles (E Standard through Drop E; 7/8-string; 4/5-string bass; custom fields: string count, open-note pitches, fret range, concert pitch, capo/transposition)\n- Source/ParameterIDs.h profileIndex, tuningIndex (read only)\n- Source/StateManager.h for how non-param state might be referenced later (read only \u2014 do not edit)\n- Source/UI/NoteRulerData.* or pitch modules if they expose tuning hooks (read only)\n\nImplement Source/Profiles.h and Source/Profiles.cpp:\n1. PlacementProfile enum/id + table of named factory placement profiles covering all \u00a715.1 entries with: display name, category label, recommended analyzer weighting hints (data-only floats/flags), recommended default parameter seed ValueTree or structured DefaultSeed (band/stage hints, Tight Cut / Chug emphasis flags), recommended parameter range metadata (min/max guides \u2014 not hard clamps that hide processing).\n2. TuningProfile: factory tunings listed in \u00a715.2 as structured records (name, stringCount, openStringMidiOrHz array fixed max \u22658, fretRangeMin/Max, concertPitchHz default 440, capoSemitones, transpositionSemitones). CustomTuning mutable record with same fields and setters.\n3. ProfileCatalog (or free functions): listPlacementProfiles(), listTuningProfiles(), getPlacement(id/index), getTuning(id/index), findByName. Index order stable and aligned with profileIndex/tuningIndex intended use (0-based contiguous).\n4. applyPlacementDefaults(APVTS&, placementId) optional helper that only writes documented default seeds when explicitly invoked \u2014 never continuous hidden modulation. No audio processing in this module.\n5. Serialization helpers: placement/tuning id + custom tuning fields to/from ValueTree/XML properties for host state (k.4/StateManager may call).\n6. No heap in hot paths; catalogs are static or constructed once on message thread.\n\nDo not write factory preset files, Processor/Editor, CMakeLists, or tests. verification_commands left empty.",
+  "acceptance_criteria": [
+    "Source/Profiles.h and Source/Profiles.cpp exist",
+    "All \u00a715.1 placement profiles are named and queryable by stable index/id",
+    "All \u00a715.2 factory tuning profiles are present with string count and open-string pitch data; custom tuning fields are supported",
+    "Profiles expose defaults/analyzer weighting/labels/recommended ranges only and do not implement DSP or hidden continuous processing",
+    "Catalog list/get APIs are index-stable for profileIndex/tuningIndex consumption",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "pi_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/Profiles.h",
+    "Source/Profiles.cpp"
+  ],
+  "forbidden_changes": [
+    "modify Source/StateManager.*",
+    "modify Source/PluginProcessor.*",
+    "modify Source/PluginEditor.*",
+    "modify CMakeLists.txt",
+    "modify Resources/Presets/**",
+    "modify Source/ParameterIDs.h",
+    "implement audio DSP or processBlock code",
+    "add third-party dependencies"
+  ],
+  "allowed_symbols": [
+    "PlacementProfile",
+    "TuningProfile",
+    "CustomTuning",
+    "ProfileCatalog",
+    "listPlacementProfiles",
+    "listTuningProfiles",
+    "getPlacement",
+    "getTuning",
+    "applyPlacementDefaults",
+    "placementToValueTree",
+    "tuningToValueTree"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "static constexpr tables for factory profiles",
+      "ValueTree or POD structs for seeds and tuning arrays",
+      "optional APVTS default seed apply helper on explicit call"
+    ],
+    "forbidden": [
+      "hidden processing that alters audio without user params",
+      "edit factory preset JSON in this task",
+      "wire processor/editor UI selectors"
+    ]
+  },
+  "dependencies": [],
+  "verification_commands": [],
+  "task_timeout_seconds": 900,
+  "model": "openrouter/z-ai/glm-5.2"
+}

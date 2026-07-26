@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "task_id": "i.1",
+  "phase": "I",
+  "phase_id": "i",
+  "title": "PercentileCloud \u2014 ring buffer percentiles, dynamic range map, history modes",
+  "description": "Implement the Spectral Percentile Cloud data pipeline that consumes SpectralAnalysisEngine frames and produces per-bin percentile / dynamic-range maps for the diagnostic GUI per SHREDEQ_SPEC.md \u00a712.2\u201312.3 and \u00a712.8.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a712.2 (10th/50th/90th optional 99th percentiles; interpretation of narrow/wide bands)\n- .abracapocus/SHREDEQ_SPEC.md \u00a712.3 (Dynamic Range Map D(f) = Q_90(f) - Q_10(f))\n- .abracapocus/SHREDEQ_SPEC.md \u00a712.8 (history windows: 2s, 5s, 10s, 30s, frozen capture, entire scan pass; history stops CPU when disabled)\n- .abracapocus/SHREDEQ_SPEC.md \u00a718.3 and \u00a720 (background/message thread; fixed memory; quality levels do not alter EQ)\n- Source/Analysis/SpectralAnalysisEngine.* multi-consumer snapshot API from phase G (read only \u2014 reuse; do not reimplement FFT)\n- Sibling Source/UI/* patterns if present (read only)\n- CMakeLists.txt (read only; i.3 owns CMake registration and processor taps)\n\nImplement Source/UI/PercentileCloud.h and Source/UI/PercentileCloud.cpp:\n1. PercentileCloud is a data path only (no JUCE Component painting in this task). Document that GUI paint happens in a later phase.\n2. Consume frames ONLY via SpectralAnalysisEngine multi-consumer snapshot APIs (getLatestSpectrum / getSpectrumSnapshot or equivalent). Never own a second FFT engine.\n3. Per log-frequency bin (or engine bin): maintain a fixed-capacity ring of recent S_t[k] (dB) samples and compute Q10, Q50 (median), Q90, and optionally Q99. Prefer an efficient fixed-buffer estimator (e.g. sorted scratch of known capacity, histogram bins, or P\u00b2-style) \u2014 confound: no unbounded vectors of history frames.\n4. Dynamic Range Map: D(f) = Q_90(f) - Q_10(f) exposed as a parallel float array/span with the same bin count as the engine spectrum.\n5. History modes: selectable window among 2s, 5s, 10s, 30s; Frozen holds the last completed statistics without consuming new frames (near-zero CPU beyond idle); Scan mode can accumulate for an entire scan pass when told scan is active. setHistoryWindow / setFrozen / setScanActive (names may match project style).\n6. Threading: update()/processNewFrames() called from analyzer background or message thread only \u2014 never from processBlock. Snapshots for the GUI must be safe to read without blocking audio (double-buffer or atomics + fixed arrays).\n7. prepare(sampleRate, maxBins, maxHistorySeconds) preallocates all rings/scratches once. reset() clears history. setEnabled(false) stops updates and releases CPU while retaining last valid snapshot if useful for GUI freeze.\n8. Numerical guards: finite dB values, empty-history safe defaults (e.g. zeros or quiet-floor), bin count changes on engine re-prepare.\n9. Do not modify PluginProcessor, CMakeLists, HeadroomHistogram, ResonancePersistenceMap, or tests.\n\nC++20/JUCE style consistent with Source/. verification_commands left empty \u2014 C++ adapter infers cmake/ctest.",
+  "acceptance_criteria": [
+    "Source/UI/PercentileCloud.h and Source/UI/PercentileCloud.cpp exist",
+    "PercentileCloud consumes SpectralAnalysisEngine spectrum snapshots and does not implement a second FFT/STFT engine",
+    "Per-bin Q10, Q50, and Q90 are computed from a fixed-capacity history ring; optional Q99 may be present",
+    "Dynamic Range Map D(f) = Q_90(f) - Q_10(f) is exposed with the same bin count as the spectrum",
+    "History modes support at least 2s/5s/10s/30s windows plus frozen and scan-pass accumulation; disabled/frozen paths stop expensive updates",
+    "All percentile computation runs off the audio thread; prepare bounds memory with no unbounded history growth",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "codex_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/UI/PercentileCloud.h",
+    "Source/UI/PercentileCloud.cpp"
+  ],
+  "forbidden_changes": [
+    "modify CMakeLists.txt or CMakePresets.json",
+    "modify Source/PluginProcessor.* or Source/PluginEditor.*",
+    "modify Source/Analysis/SpectralAnalysisEngine.* or Source/Analysis/AnalysisFifo.*",
+    "modify Source/UI/HeadroomHistogram.*",
+    "modify Source/UI/ResonancePersistenceMap.*",
+    "modify tests/**",
+    "add a second FFT/STFT engine or third-party FFT dependency",
+    "implement JUCE Component painting / editor wiring",
+    "allocate unbounded spectral history"
+  ],
+  "allowed_symbols": [
+    "PercentileCloud",
+    "prepare",
+    "reset",
+    "setEnabled",
+    "setHistoryWindow",
+    "setFrozen",
+    "setScanActive",
+    "update",
+    "processNewFrames",
+    "getPercentileQ10",
+    "getPercentileQ50",
+    "getPercentileQ90",
+    "getPercentileQ99",
+    "getDynamicRangeMap",
+    "getBinCount",
+    "HistoryWindow"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "fixed-capacity per-bin ring or histogram percentile estimator",
+      "double-buffered GUI snapshot of Q10/Q50/Q90/D(f)",
+      "history window enum for 2s/5s/10s/30s/frozen/scan",
+      "reuse SpectralAnalysisEngine snapshot APIs as sole spectral input"
+    ],
+    "forbidden": [
+      "own CMakeLists.txt target_sources",
+      "PluginProcessor analyzer tap wiring",
+      "second FFT engine",
+      "GUI Component paint implementation",
+      "unbounded std::vector growth per frame without fixed cap"
+    ]
+  },
+  "dependencies": [],
+  "verification_commands": [],
+  "task_timeout_seconds": 900
+}

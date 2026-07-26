@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "task_id": "f.2",
+  "phase": "F",
+  "phase_id": "f",
+  "title": "NoteFollower, harmonic targeting, ParametricBand integration, CMakeLists",
+  "description": "Implement NoteFollower harmonic targeting and optional per-band attachment on ParametricBand; register phase-F sources in CMakeLists.txt. This task is the sole owner of ParametricBand.* and CMakeLists.txt for phase F.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a79.1\u20139.6 (purpose, sources, f_target, log-frequency smoothing, confidence handling, controls)\n- .abracapocus/SHREDEQ_SPEC.md \u00a718.4 (audio thread interpolates toward latest valid pitch target)\n- Source/DSP/PitchDetector.h public estimate/MIDI APIs from f.1 (read only; do not rewrite YIN)\n- Source/DSP/ParametricBand.h/.cpp existing band list, frequency setters, filter path, and prepare/reset/process (modify only for optional follower attach)\n- CMakeLists.txt target_sources patterns from phases B\u2013E (append only)\n- Source/ParameterIDs.h note-follower related IDs if present (read only)\n\nImplement Source/DSP/NoteFollower.h and Source/DSP/NoteFollower.cpp:\n1. NoteFollower with prepare(sampleRate), reset(), and update path usable from audio or control rate.\n2. Inputs: current f0 Hz + confidence from PitchDetector snapshot and/or MIDI tracker; tracking source selector (AudioMonophonic / MIDI).\n3. Target: f_target = f0 * h * 2^(c/1200) with harmonic multiplier h in 1\u20138 and cents offset c; clamp to configurable min/max frequency.\n4. Log-frequency smoothing per \u00a79.4:\n   ell[n] = beta * ell[n-1] + (1-beta) * ln(f_target)\n   f_smooth[n] = exp(ell[n])\n   with configurable smoothing/beta (or time-constant mapping document).\n5. Confidence handling per \u00a79.5: when confidence < threshold, support hold last valid frequency, return toward a configured home frequency, fade associated follow gain toward zero / neutral, or temporary bypass; default = brief hold then fade toward neutral. Expose hold time and return time controls.\n6. Control surface fields from \u00a79.6 needed by bands: tracking source, harmonic, cents, confidence threshold, smoothing, hold/return, min/max frequency, note priority (forwarded to MIDI path), listen/enable flags. Q/static gain/dynamic range remain on the band; follower drives frequency (and optional follow-amount) only.\n\nIntegrate into Source/DSP/ParametricBand.h/.cpp:\n1. Any band may optionally attach/enable a NoteFollower (member optional flag + NoteFollower instance or pointer-owned-by-value).\n2. When enabled and confidence path active, band center frequency tracks f_smooth each block (or control tick) without reallocating filters unsafely \u2014 reuse existing modulation-stable coefficient update paths (TPT/biquad) already on the band.\n3. Disabled follower leaves legacy static/manual frequency behavior unchanged.\n4. Do not add per-band M/S encode here; do not rewrite the entire 12-band engine.\n\nCMakeLists.txt:\n1. Append Source/DSP/PitchDetector.cpp, Source/DSP/NoteFollower.cpp to the plugin/DSP target_sources lists.\n2. Append tests/PitchTrackingTests.cpp to the test target (f.3 owns test body; list the file so the target links).\n3. Minimal append-only edits \u2014 no preset or target rename churn.\n\nDo not implement unit tests in this task. verification_commands left empty.",
+  "acceptance_criteria": [
+    "Source/DSP/NoteFollower.h and Source/DSP/NoteFollower.cpp exist",
+    "NoteFollower computes f_target = f0*h*2^(c/1200) with h in 1\u20138 and cents offset, then applies log-frequency smoothing ell/f_smooth per \u00a79.4",
+    "Confidence handling implements hold-then-fade-toward-neutral default with configurable threshold, hold time, return time, and home frequency per \u00a79.5",
+    "ParametricBand optionally attaches/enables NoteFollower so a band center frequency can track f_smooth; disabled path preserves prior manual frequency behavior",
+    "CMakeLists.txt lists PitchDetector.cpp, NoteFollower.cpp, and tests/PitchTrackingTests.cpp on the correct targets",
+    "No heap allocation in NoteFollower/band per-sample hot paths for follower updates",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "antigravity_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/DSP/NoteFollower.h",
+    "Source/DSP/NoteFollower.cpp",
+    "Source/DSP/ParametricBand.h",
+    "Source/DSP/ParametricBand.cpp",
+    "CMakeLists.txt"
+  ],
+  "forbidden_changes": [
+    "rewrite Source/DSP/PitchDetector.* YIN algorithm",
+    "modify tests/PitchTrackingTests.cpp body (f.3 owns content)",
+    "modify Source/PluginProcessor.* or Source/PluginEditor.*",
+    "modify Source/ParameterIDs.h",
+    "modify CMakePresets.json",
+    "add third-party dependencies",
+    "broad CMake restructure or rename plugin targets",
+    "implement resonance scanner or PluginProcessor pitch-thread ownership",
+    "change band count topology or M/S stage responsibilities"
+  ],
+  "allowed_symbols": [
+    "NoteFollower",
+    "ParametricBand",
+    "PitchDetector",
+    "prepare",
+    "reset",
+    "setEnabled",
+    "setTrackingSource",
+    "setHarmonic",
+    "setCentsOffset",
+    "setConfidenceThreshold",
+    "setSmoothing",
+    "setHoldTimeMs",
+    "setReturnTimeMs",
+    "setHomeFrequencyHz",
+    "setFrequencyLimits",
+    "update",
+    "getSmoothedFrequencyHz",
+    "attachNoteFollower",
+    "setNoteFollowerEnabled",
+    "applyNoteFollower"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "compose NoteFollower by value inside ParametricBand",
+      "consume PitchDetector snapshot by value/atomics without owning the detector thread",
+      "map smoothing time constant to beta for log-domain one-pole",
+      "append-only CMake target_sources for phase-F files",
+      "thin adapters for Audio vs MIDI tracking source enum"
+    ],
+    "forbidden": [
+      "reimplement YIN inside NoteFollower",
+      "GUI note-ruler or editor controls",
+      "PluginProcessor processBlock wiring",
+      "unit test implementation",
+      "new third-party dependency"
+    ]
+  },
+  "dependencies": [
+    "f.1"
+  ],
+  "verification_commands": [],
+  "task_timeout_seconds": 900
+}

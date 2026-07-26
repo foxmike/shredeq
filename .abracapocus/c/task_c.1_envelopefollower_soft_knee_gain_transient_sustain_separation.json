@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "task_id": "c.1",
+  "phase": "C",
+  "phase_id": "c",
+  "title": "EnvelopeFollower, soft-knee gain, transient/sustain separation",
+  "description": "Implement the level detector ballistics, soft-knee gain target function, and dual-envelope transient/sustain separation used by per-band dynamic EQ.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a74.2\u20134.4 (envelope alphas, L[n] in dB, F_K(u), downward/upward g_target, e_f/e_s separation)\n- .abracapocus/SHREDEQ_SPEC.md \u00a721.3 (dynamic EQ verification notes)\n- Source/DSP/ParametricBand.h if present (public shapes only; do not edit)\n- Sibling DSP style under Source/DSP/ from phase B (read only)\n\nImplement Source/DSP/EnvelopeFollower.h and Source/DSP/EnvelopeFollower.cpp:\n1. EnvelopeFollower class: prepare(sampleRate), reset(), setAttackMs/setReleaseMs (or setTimeConstants), processSample(|x| or sample) updating internal e[n] with attack/release ballistics:\n   e[n] = alpha_a * e[n-1] + (1-alpha_a)*|x| when rising;\n   e[n] = alpha_r * e[n-1] + (1-alpha_r)*|x| when falling;\n   alpha = exp(-1 / (fs * tau)). Expose levelLinear() and levelDb() with L = 20*log10(e+epsilon).\n2. Soft-knee helper (free function or nested type SoftKneeGain / computeSoftKneeGainDb): u = L - T; F_K(u) piecewise as spec \u00a74.3 for knee width K; downward compression g_target = -min(D_max, (1-1/R)*F_K(u)); upward action reverses sign and caps by positive range. Optional independent gain-smoothing coefficient separate from detector attack/release (no chatter).\n3. TransientSustainSeparator (or dual-envelope API on the same module): maintain e_f (fast) and e_s (slow); transient = max(0, e_f - k*e_s); sustain = max(0, e_s - lambda*transient); expose setters for fast/slow times and k, lambda.\n4. No heap allocation in per-sample paths. No JUCE buffer ownership required; plain float sample API is preferred so DynamicProcessor can wrap it.\n5. Keep headers self-contained enough for unit tests without plugin deps beyond juce_core/juce_audio_basics if needed.\n\nDo NOT implement DynamicProcessor modes, ParametricBand wiring, CMakeLists.txt, or tests.",
+  "acceptance_criteria": [
+    "Source/DSP/EnvelopeFollower.h and Source/DSP/EnvelopeFollower.cpp exist",
+    "EnvelopeFollower implements attack/release ballistics with alpha = exp(-1/(fs*tau)) and exposes linear and dB level",
+    "Soft-knee gain computation implements F_K(u) and downward g_target = -min(D_max, (1-1/R)*F_K(u)) per SHREDEQ_SPEC.md section 4.3",
+    "Transient/sustain separation exposes dual envelopes with transient=max(0,e_f-k*e_s) and sustain=max(0,e_s-lambda*transient)",
+    "No heap allocation in per-sample process paths",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "codex_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/DSP/EnvelopeFollower.h",
+    "Source/DSP/EnvelopeFollower.cpp"
+  ],
+  "forbidden_changes": [
+    "modify CMakeLists.txt or CMakePresets.json",
+    "modify Source/DSP/DynamicProcessor.*",
+    "modify Source/DSP/ParametricBand.*",
+    "modify Source/DSP/BiquadCoefficients.* or Source/DSP/TPTFilter.*",
+    "modify tests/**",
+    "modify Source/PluginProcessor.* or Source/PluginEditor.*",
+    "add third-party dependencies",
+    "implement full DynamicProcessor mode matrix"
+  ],
+  "allowed_symbols": [
+    "EnvelopeFollower",
+    "SoftKneeGain",
+    "computeSoftKneeGainDb",
+    "TransientSustainSeparator",
+    "prepare",
+    "reset",
+    "processSample",
+    "setAttackMs",
+    "setReleaseMs",
+    "levelLinear",
+    "levelDb",
+    "transientLevel",
+    "sustainLevel"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "place soft-knee and transient/sustain helpers in EnvelopeFollower module",
+      "float sample API rather than juce::AudioBuffer ownership",
+      "independent gain smoother coeff distinct from detector alphas",
+      "epsilon floor for log10 path"
+    ],
+    "forbidden": [
+      "own CMakeLists.txt target_sources",
+      "wire PluginProcessor processBlock",
+      "implement detector bandpass filter bank (belongs in DynamicProcessor)",
+      "GUI visualization rendering"
+    ]
+  },
+  "dependencies": [],
+  "task_timeout_seconds": 900,
+  "verification_commands": []
+}

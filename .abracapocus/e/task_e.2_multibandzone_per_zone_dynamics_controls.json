@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "task_id": "e.2",
+  "phase": "E",
+  "phase_id": "e",
+  "title": "MultibandZone \u2014 per-zone dynamics, controls",
+  "description": "Implement per-zone multiband dynamics and controls, reusing EnvelopeFollower / soft-knee helpers from phase C, per SHREDEQ_SPEC.md \u00a75.4.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a75.2 and \u00a75.4 (zone names and per-zone controls)\n- Source/DSP/EnvelopeFollower.h/.cpp (ballistics, soft-knee, transient/sustain \u2014 read only; reuse)\n- Source/DSP/DynamicProcessor.* public patterns if present (read only; do not re-own full mode matrix unless thin reuse helps)\n- Source/DSP/MultibandCrossover.h public split API from e.1 (read only)\n- Source/ParameterIDs.h multiband per-zone parameter IDs if present (read only)\n\nImplement Source/DSP/MultibandZone.h and Source/DSP/MultibandZone.cpp:\n1. MultibandZone class representing one of Weight/Body/Bite/Fizz: prepare(sampleRate, maxBlockSize), reset(), process(float* samples, numSamples) or channel-aware equivalent \u2014 no heap in process.\n2. Static zone make-up/gain in dB applied as linear gain (or smoothed) independent of dynamics.\n3. Dynamics path reusing EnvelopeFollower (and soft-knee / dual-envelope helpers as appropriate): threshold, ratio, attack, hold, release, dynamic range cap, upward or downward operation, optional auto-threshold hook as a simple level offset or enable flag if ParameterIDs imply it.\n4. Transient emphasis and sustain emphasis map onto transient/sustain separation (scale GR or drive from e_f/e_s components) rather than inventing a third envelope system.\n5. solo, mute, bypass flags: mute \u2192 silence zone; bypass \u2192 pass zone audio with static gain only / no dynamics; solo is a data flag for the engine to mute non-soloed zones (document contract).\n6. Detector source enum/field (internal / external sidechain placeholder) and stereo placement field as data for engine/processor \u2014 do not own full M/S encode redesign; apply simple mid/side leg gain if placement requires and matches existing DSP patterns.\n7. Setters clamp to sensible guitar/bass multiband ranges; zipper-safe gain and threshold updates.\n8. Optional getters: current GR dB, zone energy, bypass/solo/mute state for GUI/tests.\n\nDo NOT edit MultibandCrossover, MultibandEngine, PluginProcessor, CMakeLists.txt, or tests.",
+  "acceptance_criteria": [
+    "Source/DSP/MultibandZone.h and Source/DSP/MultibandZone.cpp exist",
+    "MultibandZone reuses EnvelopeFollower (or its soft-knee/transient helpers) for per-zone dynamics with threshold, ratio, attack, hold, release, and range cap",
+    "Zone controls include gain, solo, mute, bypass, transient emphasis, sustain emphasis, upward/downward mode, and detector/placement fields per \u00a75.4",
+    "Bypass disables dynamics while mute silences; solo is exposed for engine-level non-solo muting",
+    "No heap allocation in per-sample or per-block process paths",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "antigravity_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/DSP/MultibandZone.h",
+    "Source/DSP/MultibandZone.cpp"
+  ],
+  "forbidden_changes": [
+    "modify CMakeLists.txt or CMakePresets.json",
+    "modify Source/DSP/MultibandCrossover.*",
+    "modify Source/DSP/MultibandEngine.*",
+    "modify Source/DSP/EnvelopeFollower.* beyond include/use",
+    "modify Source/DSP/DynamicProcessor.* beyond include/use",
+    "modify Source/PluginProcessor.* or Source/PluginEditor.*",
+    "modify Source/ParameterIDs.h",
+    "modify tests/**",
+    "add third-party dependencies",
+    "implement LR4 crossover tree or PluginProcessor fan-in"
+  ],
+  "allowed_symbols": [
+    "MultibandZone",
+    "prepare",
+    "reset",
+    "process",
+    "setGainDb",
+    "setThresholdDb",
+    "setRatio",
+    "setAttackMs",
+    "setHoldMs",
+    "setReleaseMs",
+    "setDynamicRangeDb",
+    "setUpward",
+    "setTransientEmphasis",
+    "setSustainEmphasis",
+    "setSolo",
+    "setMute",
+    "setBypass",
+    "setDetectorSource",
+    "setPlacement",
+    "setAutoThreshold",
+    "getGainReductionDb",
+    "EnvelopeFollower"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "compose EnvelopeFollower inside MultibandZone",
+      "float buffer API matching sibling DSP",
+      "solo as flag consumed by MultibandEngine",
+      "simple placement/detector enums without owning sidechain buses"
+    ],
+    "forbidden": [
+      "own CMakeLists.txt target_sources",
+      "wire PluginProcessor processBlock",
+      "reimplement LR4 filters",
+      "GUI contour rendering",
+      "new third-party dynamics library"
+    ]
+  },
+  "dependencies": [
+    "e.1"
+  ],
+  "task_timeout_seconds": 900,
+  "verification_commands": []
+}

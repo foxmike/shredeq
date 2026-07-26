@@ -1,0 +1,62 @@
+{
+  "verification": {
+    "checks": [
+      {
+        "name": "phase_e_dsp_files_exist",
+        "command": [
+          "bash",
+          "-lc",
+          "test -f Source/DSP/MultibandCrossover.h && test -f Source/DSP/MultibandCrossover.cpp && test -f Source/DSP/MultibandZone.h && test -f Source/DSP/MultibandZone.cpp && test -f Source/DSP/MultibandEngine.h && test -f Source/DSP/MultibandEngine.cpp && test -f tests/MultibandTests.cpp"
+        ]
+      },
+      {
+        "name": "cmake_lists_lists_phase_e_sources",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"MultibandCrossover\\.cpp\" CMakeLists.txt && rg -q \"MultibandZone\\.cpp\" CMakeLists.txt && rg -q \"MultibandEngine\\.cpp\" CMakeLists.txt && rg -q \"MultibandTests\\.cpp\" CMakeLists.txt"
+        ]
+      },
+      {
+        "name": "lr4_crossover_api_present",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"Crossover|crossover|LR4|Linkwitz|Butterworth\" Source/DSP/MultibandCrossover.h Source/DSP/MultibandCrossover.cpp && rg -q \"setCrossover|crossover1|Crossover1|f1|Weight|Body\" Source/DSP/MultibandCrossover.h Source/DSP/MultibandCrossover.cpp"
+        ]
+      },
+      {
+        "name": "multiband_zone_dynamics_present",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"EnvelopeFollower|threshold|attack|release\" Source/DSP/MultibandZone.h Source/DSP/MultibandZone.cpp && rg -q \"solo|mute|bypass|transient|sustain\" Source/DSP/MultibandZone.h Source/DSP/MultibandZone.cpp"
+        ]
+      },
+      {
+        "name": "processor_wires_multiband_engine",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"MultibandEngine\" Source/PluginProcessor.h Source/PluginProcessor.cpp && rg -q \"MultibandEngine\" Source/DSP/MultibandEngine.h Source/DSP/MultibandEngine.cpp"
+        ]
+      },
+      {
+        "name": "multiband_tests_reconstruction_mentions",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"reconstructor|reconstruction|unity|magnitude|flat\" tests/MultibandTests.cpp && rg -q \"UnitTest|juce::UnitTest\" tests/MultibandTests.cpp"
+        ]
+      },
+      {
+        "name": "cmake_configure_only",
+        "command": [
+          "bash",
+          "-lc",
+          "cmake -S . -B build/phase-e-configure -DSHREDEQ_CONFIGURE_ONLY=ON"
+        ]
+      }
+    ]
+  }
+}

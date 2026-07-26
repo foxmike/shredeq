@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "task_id": "i.4",
+  "phase": "I",
+  "phase_id": "i",
+  "title": "Analyzer data pipeline tests",
+  "description": "Add juce::UnitTest coverage for the phase-I analyzer data pipeline: PercentileCloud, HeadroomHistogram, ResonancePersistenceMap, StereoCoherenceData, and NoteRulerData per SHREDEQ_SPEC.md \u00a712.2\u201312.7, \u00a718.3, \u00a720, and \u00a721.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- Source/UI/PercentileCloud.* public APIs from i.1\n- Source/UI/HeadroomHistogram.* public APIs from i.2\n- Source/UI/ResonancePersistenceMap.*, StereoCoherenceData.*, NoteRulerData.* from i.3\n- Source/Analysis/SpectralAnalysisEngine.* snapshot/push APIs from g.1\n- tests/TestMain.cpp and existing tests/*Tests.cpp patterns (phases B\u2013H)\n- CMakeLists.txt as left by i.3 (tests/AnalyzerTests.cpp should already be listed \u2014 do not edit CMake unless the entry is missing)\n- .abracapocus/SHREDEQ_SPEC.md \u00a712.2\u201312.7 and \u00a720 (percentiles, D(f), persistence map, headroom, coherence, note ruler, quality modes)\n\nImplement tests/AnalyzerTests.cpp:\n1. PercentileCloud: feed a known steady spectrum (constant bin values and/or engine-fed steady sine frames long enough to fill history) \u2192 Q10/Q50/Q90 converge near the constant within documented tolerance; D(f)=Q90-Q10 near 0 for steady tone; after setFrozen(true), further inputs do not change snapshot; setEnabled(false) remains safe.\n2. Dynamic content: alternate low/high magnitude frames \u2192 Q90-Q10 (D(f)) widens versus steady case at exercised bins (ordering/inequality assert, not bit-identical).\n3. HeadroomHistogram: push full-scale sine or square on L only \u2192 L peak ~0 dBFS, elevated L histogram mass near top bins; R quieter; mono between; crest factor finite and >1 for sine-like signals; clipped-count increments for deliberately overloaded samples (|x|>1).\n4. ResonancePersistenceMap: inject persistent excess at one bin across many columns \u2192 map intensity forms a stable vertical structure (mean intensity at that bin across recent columns above neighbors); a brief burst does not dominate long-term column average the same way.\n5. StereoCoherenceData: identical L=R signal \u2192 high correlation / low side energy; L=\u2212R (or out-of-phase) \u2192 correlation drops / side energy rises (assert direction of change).\n6. NoteRulerData: with a mocked/injected f0 (e.g. 110 Hz A2) current note labeling is plausible (A2 or enharmonic equivalence within API); markers API returns finite sorted frequencies; does not claim to mutate EQ parameters.\n7. Quality/history bounds: prepare with Live vs Analysis style histories remains within fixed capacities (no growth after prepare); empty/disabled paths do not NaN.\n8. Use juce::UnitTest; no new third-party test frameworks. Do not rewrite production analyzer modules solely to force green tests \u2014 only assert documented tolerances.\n\nverification_commands left empty \u2014 C++ adapter infers cmake/ctest.",
+  "acceptance_criteria": [
+    "tests/AnalyzerTests.cpp exists and registers juce::UnitTest coverage for PercentileCloud, HeadroomHistogram, ResonancePersistenceMap, StereoCoherenceData, and NoteRulerData",
+    "Steady spectrum/sine path asserts Q10/Q50/Q90 near the held level and D(f) near zero; frozen mode stops snapshot updates",
+    "Variable-level frames produce larger D(f) than the steady case at exercised bins",
+    "HeadroomHistogram asserts L/R/mono distribution differences, finite crest factor, and clipped-sample counting on overloaded input",
+    "ResonancePersistenceMap asserts higher persistent intensity for a stable excess bin versus neighbors/short bursts",
+    "StereoCoherenceData asserts higher correlation for L=R than for out-of-phase content; NoteRulerData returns finite markers and a plausible current note for injected f0",
+    "No production analyzer algorithm rewrites solely to force green tests",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "pi_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "tests/AnalyzerTests.cpp"
+  ],
+  "forbidden_changes": [
+    "modify Source/UI/PercentileCloud.*",
+    "modify Source/UI/HeadroomHistogram.*",
+    "modify Source/UI/ResonancePersistenceMap.*",
+    "modify Source/UI/StereoCoherenceData.*",
+    "modify Source/UI/NoteRulerData.*",
+    "modify Source/Analysis/**",
+    "modify Source/PluginProcessor.*",
+    "modify CMakeLists.txt except emergency single-line append of missing AnalyzerTests.cpp",
+    "modify CMakePresets.json",
+    "modify Source/PluginEditor.*",
+    "add Catch2/GoogleTest/third-party test frameworks",
+    "change production analyzer algorithms solely to force green tests"
+  ],
+  "allowed_symbols": [
+    "AnalyzerTests",
+    "runTest",
+    "PercentileCloud",
+    "HeadroomHistogram",
+    "ResonancePersistenceMap",
+    "StereoCoherenceData",
+    "NoteRulerData",
+    "SpectralAnalysisEngine",
+    "AnalyzerQuality"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "juce::UnitTest subclass in tests/AnalyzerTests.cpp",
+      "synthetic sines, constant spectra, and stereo L=R / L=\u2212R fixtures",
+      "relative percentile/coherence/map intensity tolerances",
+      "emergency CMake one-line append only if test source missing from target"
+    ],
+    "forbidden": [
+      "processor/editor UI host integration tests",
+      "broad CMake refactors",
+      "pluginval or DAW host runs inside this unit test",
+      "requiring sample-identical FFT bit patterns across platforms"
+    ]
+  },
+  "dependencies": [
+    "i.1",
+    "i.2",
+    "i.3"
+  ],
+  "verification_commands": [],
+  "task_timeout_seconds": 900,
+  "model": "openrouter/z-ai/glm-5.2"
+}

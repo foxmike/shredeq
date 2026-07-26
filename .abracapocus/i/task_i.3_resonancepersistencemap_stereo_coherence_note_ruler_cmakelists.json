@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "task_id": "i.3",
+  "phase": "I",
+  "phase_id": "i",
+  "title": "ResonancePersistenceMap, stereo coherence, note ruler, CMakeLists",
+  "description": "Implement Resonance Persistence Map, stereo-coherence analyzer data, note/tuning ruler data, analyzer quality-mode orchestration, PluginProcessor analyzer tap wiring, and CMakeLists registration for the phase-I UI/analyzer data pipeline per SHREDEQ_SPEC.md \u00a712.4, \u00a712.6\u201312.7, \u00a712.8\u201312.9, \u00a718.3, and \u00a720. This task is the sole owner of PluginProcessor.* and CMakeLists.txt for phase I.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a712.4 (scrolling freq\u00d7time resonance excess/persistence intensity)\n- .abracapocus/SHREDEQ_SPEC.md \u00a712.6 (mid/side energy, correlation, mono-sum loss, side LF accumulation)\n- .abracapocus/SHREDEQ_SPEC.md \u00a712.7 (note names, string/tuning fundamentals, harmonics, current detected/MIDI note overlay data \u2014 not forced param quantize)\n- .abracapocus/SHREDEQ_SPEC.md \u00a720 analyzer quality: Off / Live / Studio / Analysis (FFT size/frame rate/history only; must not alter EQ response)\n- Source/Analysis/SpectralAnalysisEngine.* snapshot + config APIs from g.1 (read only reuse)\n- Source/DSP/ResonanceDetector.* excess/persistence fields usable as map intensity inputs (read only)\n- Source/DSP/PitchDetector.* / NoteFollower f0 for note ruler current-note fields (read only)\n- Source/UI/PercentileCloud.* and Source/UI/HeadroomHistogram.* public prepare/update APIs from i.1\u2013i.2\n- Source/PluginProcessor.h/.cpp existing spectral tap / processBlock order from phase G\n- CMakeLists.txt append patterns from prior phases\n\nImplement Source/UI/ResonancePersistenceMap.h/.cpp:\n1. Data-only scrolling frequency-vs-time ring: columns = time, rows = freq bins; intensity = resonance excess \u00d7 persistence (or detector-supplied excess with decaying persistence), not raw level alone.\n2. Fixed dimensions at prepare (maxColumns for history length under quality mode, binRows from engine). Scroll by advancing write column; frozen/scan modes mirror PercentileCloud semantics where applicable.\n3. Off-audio-thread update from SpectralAnalysisEngine (+ optional ResonanceDetector snapshot). GUI-safe latest map snapshot.\n\nImplement Source/UI/StereoCoherenceData.h/.cpp (names may match style):\n1. Frequency-dependent mid energy, side energy, correlation (\u22121..+1), negative-correlation risk flag/metric, mono-sum loss estimate, side low-frequency accumulation metric.\n2. Consume stereo snapshots or time-domain sidebands via processor-provided analysis frames \u2014 still no second full STFT ownership if engine already exposes stereo; if only mono spectrum exists, document a lightweight stereo coherence path on analysis thread using FIFO time domain and short per-band correlators with fixed bands.\n3. prepare-bounded memory; disable able.\n\nImplement Source/UI/NoteRulerData.h/.cpp:\n1. Overlay data only: note names, optional guitar string fundamentals for current tuning, octave harmonic markers, fret-range guides hooks, current detected f0/note from PitchDetector snapshot, optional current MIDI note.\n2. Does NOT quantize EQ frequencies to notes. Pure read model for GUI.\n\nPluginProcessor.h/.cpp wiring (append-only integration):\n1. Own by-value members for PercentileCloud, HeadroomHistogram, ResonancePersistenceMap, StereoCoherenceData, NoteRulerData (and reuse existing SpectralAnalysisEngine from phase G).\n2. prepareToPlay/reset: prepare all analyzer data modules; map Analyzer quality mode (Off/Live/Studio/Analysis) to engine FFT/hop/frame-rate and history lengths on PercentileCloud/ResonancePersistenceMap \u2014 Off disables engine heavy work and data modules.\n3. processBlock: push analyzer taps into existing AnalysisFifo / SpectralAnalysisEngine and HeadroomHistogram input (pre and/or post EQ as designed); never run percentile/map/FFT on the audio thread; analyzer must not add audible latency.\n4. Publish pitch/MIDI snapshots into NoteRulerData on control/message cadence already used for pitch.\n5. Do not rewrite DSP algorithms beyond member wiring and quality-mode parameter plumbing.\n\nCMakeLists.txt:\n1. Append Source/UI/PercentileCloud.cpp, HeadroomHistogram.cpp, ResonancePersistenceMap.cpp, StereoCoherenceData.cpp, NoteRulerData.cpp to plugin targets.\n2. Append tests/AnalyzerTests.cpp to the test target (i.4 owns test body).\n3. Append-only minimal edits \u2014 no preset/target rename churn.\n\nDo not implement unit test bodies or editor paint. verification_commands left empty.",
+  "acceptance_criteria": [
+    "Source/UI/ResonancePersistenceMap.h/.cpp, Source/UI/StereoCoherenceData.h/.cpp, and Source/UI/NoteRulerData.h/.cpp exist as data-only modules",
+    "ResonancePersistenceMap exposes a fixed-capacity freq\u00d7time ring whose intensity reflects resonance excess/persistence rather than raw spectrum level alone",
+    "StereoCoherenceData exposes frequency-dependent mid/side energy, correlation, and mono-sum loss related metrics with bounded memory",
+    "NoteRulerData exposes note/tuning/harmonic overlay fields and current detected/MIDI note hooks without quantizing EQ parameters",
+    "Source/PluginProcessor.h/.cpp owns and prepares PercentileCloud, HeadroomHistogram, ResonancePersistenceMap, StereoCoherenceData, and NoteRulerData; processBlock only pushes taps/FIFOs and never runs STFT/percentiles on the audio thread",
+    "Analyzer quality modes Off/Live/Studio/Analysis adjust analysis FFT/frame/history cost only and do not change the audible EQ response path",
+    "CMakeLists.txt lists the new Source/UI/*.cpp sources and tests/AnalyzerTests.cpp on the correct targets",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "antigravity_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/UI/ResonancePersistenceMap.h",
+    "Source/UI/ResonancePersistenceMap.cpp",
+    "Source/UI/StereoCoherenceData.h",
+    "Source/UI/StereoCoherenceData.cpp",
+    "Source/UI/NoteRulerData.h",
+    "Source/UI/NoteRulerData.cpp",
+    "Source/PluginProcessor.h",
+    "Source/PluginProcessor.cpp",
+    "CMakeLists.txt"
+  ],
+  "forbidden_changes": [
+    "rewrite Source/Analysis/SpectralAnalysisEngine.* STFT core",
+    "rewrite Source/UI/PercentileCloud.* or Source/UI/HeadroomHistogram.* algorithms (wire only)",
+    "modify tests/AnalyzerTests.cpp body (i.4 owns content)",
+    "modify Source/PluginEditor.* paint/layout (data plumbing only if absolutely required \u2014 prefer processor-only)",
+    "modify Source/ParameterIDs.h unless a single existing analyzer-quality ID must be read (prefer existing IDs; no inventory redesign)",
+    "modify CMakePresets.json",
+    "add third-party dependencies",
+    "broad CMake restructure or rename plugin targets",
+    "introduce a second FFT engine",
+    "add audible latency for analyzer taps",
+    "force EQ frequency parameters to musical notes"
+  ],
+  "allowed_symbols": [
+    "ResonancePersistenceMap",
+    "StereoCoherenceData",
+    "NoteRulerData",
+    "PercentileCloud",
+    "HeadroomHistogram",
+    "SpectralAnalysisEngine",
+    "AnalyzerQuality",
+    "ShredEQAudioProcessor",
+    "prepareToPlay",
+    "releaseResources",
+    "processBlock",
+    "setAnalyzerQuality",
+    "setEnabled",
+    "prepare",
+    "reset",
+    "update",
+    "getMapSnapshot",
+    "getCorrelation",
+    "getMidEnergy",
+    "getSideEnergy",
+    "getCurrentNote",
+    "getNoteMarkers"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "fixed 2D ring buffer for persistence map columns\u00d7bins",
+      "lightweight analysis-thread stereo coherence bands if engine is mono-only",
+      "embed phase-I data modules by value on the processor",
+      "map Off/Live/Studio/Analysis to engine FFT/hop and history lengths",
+      "append-only CMake target_sources for UI analyzer sources and AnalyzerTests stub"
+    ],
+    "forbidden": [
+      "GUI Component painting / look-and-feel",
+      "unit test implementation",
+      "second STFT/FFT owner",
+      "changing audible EQ coefficients based on analyzer quality",
+      "note-quantized parameter locking"
+    ]
+  },
+  "dependencies": [
+    "i.1",
+    "i.2"
+  ],
+  "verification_commands": [],
+  "task_timeout_seconds": 900
+}

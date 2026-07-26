@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "task_id": "d.2",
+  "phase": "D",
+  "phase_id": "d",
+  "title": "ChugStabilizer \u2014 detection model, dynamic reduction, Preserve Pick",
+  "description": "Implement Chug Stabilizer DSP: palm-mute detection score, dynamic wide-bell/low-shelf reduction, and Preserve Pick detail preservation per SHREDEQ_SPEC.md \u00a77.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a77.1\u20137.5 and \u00a721.5 (detection model, controls, fixtures intent)\n- Source/DSP/EnvelopeFollower.h/.cpp (ballistics \u2014 read only; reuse if appropriate)\n- Source/DSP/DynamicProcessor.h/.cpp and BiquadCoefficients patterns (read only)\n- Source/ParameterIDs.h chug_* IDs if present (read only)\n\nImplement Source/DSP/ChugStabilizer.h and Source/DSP/ChugStabilizer.cpp:\n1. ChugStabilizer with prepare(sampleRate, maxBlockSize), reset(), process on audio buffers \u2014 no heap in process; not a gate (never silence between notes).\n2. Detection: maintain L_low (target low-band detector ~70\u2013300 Hz configurable) and L_mid (broad mid reference). Compute score:\n   C[n] = w1*max(0, L_low - T_low) + w2*max(0, dL_low/dt - T_d) + w3*max(0, L_low - L_mid - Delta)\n   Configurable weights via transient sensitivity / low-mid dominance sensitivity; automatic or manual threshold.\n3. Reduction: map score through attack 0.2\u201320 ms, hold 0\u201380 ms, release 15\u2013350 ms into gain reduction up to maximum reduction 0\u201318 dB applied via wide dynamic bell or low shelf at target frequency 60\u2013320 Hz with bandwidth 0.3\u20132.5 octaves. Optional static support gain (small fixed cut/boost under the dynamic curve).\n4. Preserve Pick: parallel high-frequency / broadband transient detector; when broadband transient is strong but low-band dominance is normal, reduce applied GR so pick attacks are not treated as chug overload.\n5. Controls setters for enable, target frequency, bandwidth, max reduction, threshold (auto/manual), attack/hold/release, preservePick, transientSens, dominanceSens, static support, listen modes (audition reduction/removed contribution where feasible without owning GUI).\n6. Visualization/data getters: detected event flag, L_low, current GR curve params, reduction history sample or last GR dB, trigger source enum (raw energy / dominance / transient acceleration) for \u00a77.5.\n7. Reuse EnvelopeFollower or local envelopes; band detectors may be simple bandpass/lowpass filters from existing coefficient helpers.\n\nDo NOT edit PluginProcessor, CMakeLists.txt, TightCut, or tests.",
+  "acceptance_criteria": [
+    "Source/DSP/ChugStabilizer.h and Source/DSP/ChugStabilizer.cpp exist",
+    "Detection implements C[n] from L_low, dL_low/dt, and L_low-L_mid dominance terms per SHREDEQ_SPEC.md section 7.2",
+    "Dynamic reduction uses attack/hold/release ballistics capped by max reduction 0\u201318 dB on a wide bell or low shelf at 60\u2013320 Hz",
+    "Preserve Pick reduces false GR when broadband transient is strong without low-band dominance",
+    "Module does not gate/silence between notes when input falls below chug detectors",
+    "Exposes visualization fields for event, low-band energy, current reduction, and trigger source",
+    "No heap allocation in process paths",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "codex_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/DSP/ChugStabilizer.h",
+    "Source/DSP/ChugStabilizer.cpp"
+  ],
+  "forbidden_changes": [
+    "modify CMakeLists.txt or CMakePresets.json",
+    "modify Source/DSP/TightCut.*",
+    "modify Source/DSP/EnvelopeFollower.* or Source/DSP/DynamicProcessor.* beyond include/use",
+    "modify Source/PluginProcessor.* or Source/PluginEditor.*",
+    "modify Source/ParameterIDs.h",
+    "modify tests/**",
+    "add third-party dependencies",
+    "implement noise-gate choke behavior"
+  ],
+  "allowed_symbols": [
+    "ChugStabilizer",
+    "ChugTriggerSource",
+    "ChugVisualizationData",
+    "prepare",
+    "reset",
+    "process",
+    "setEnabled",
+    "setTargetFrequencyHz",
+    "setBandwidthOctaves",
+    "setMaxReductionDb",
+    "setThreshold",
+    "setAutoThreshold",
+    "setAttackMs",
+    "setHoldMs",
+    "setReleaseMs",
+    "setPreservePick",
+    "setTransientSensitivity",
+    "setDominanceSensitivity",
+    "setStaticSupportGainDb",
+    "setListenMode",
+    "getVisualizationData",
+    "getCurrentReductionDb"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "reuse EnvelopeFollower ballistics for L_low/L_mid and GR smoother",
+      "RBJ bell or low-shelf for reduction filter",
+      "enum trigger source and POD visualization struct",
+      "simple IIR detectors without STFT"
+    ],
+    "forbidden": [
+      "own CMakeLists.txt",
+      "wire PluginProcessor processBlock",
+      "implement TightCut",
+      "full spectral resonance scanner"
+    ]
+  },
+  "dependencies": [],
+  "task_timeout_seconds": 900,
+  "verification_commands": []
+}

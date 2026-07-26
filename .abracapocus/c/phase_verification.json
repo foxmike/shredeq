@@ -1,0 +1,54 @@
+{
+  "verification": {
+    "checks": [
+      {
+        "name": "phase_c_dsp_files_exist",
+        "command": [
+          "bash",
+          "-lc",
+          "test -f Source/DSP/EnvelopeFollower.h && test -f Source/DSP/EnvelopeFollower.cpp && test -f Source/DSP/DynamicProcessor.h && test -f Source/DSP/DynamicProcessor.cpp && test -f Source/DSP/ParametricBand.h && test -f Source/DSP/ParametricBand.cpp && test -f tests/DynamicEQTests.cpp"
+        ]
+      },
+      {
+        "name": "cmake_lists_lists_phase_c_sources",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"EnvelopeFollower\\.cpp\" CMakeLists.txt && rg -q \"DynamicProcessor\\.cpp\" CMakeLists.txt && rg -q \"DynamicEQTests\\.cpp\" CMakeLists.txt"
+        ]
+      },
+      {
+        "name": "envelope_and_soft_knee_mentions",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"attack|release|alpha\" Source/DSP/EnvelopeFollower.h Source/DSP/EnvelopeFollower.cpp && rg -q \"knee|threshold|ratio\" Source/DSP/EnvelopeFollower.h Source/DSP/EnvelopeFollower.cpp Source/DSP/DynamicProcessor.h Source/DSP/DynamicProcessor.cpp"
+        ]
+      },
+      {
+        "name": "dynamic_modes_and_detectors_present",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"downward|upward|transient|sustain|sidechain\" Source/DSP/DynamicProcessor.h Source/DSP/DynamicProcessor.cpp && rg -q \"DetectorSource|DynamicMode\" Source/DSP/DynamicProcessor.h"
+        ]
+      },
+      {
+        "name": "parametric_band_uses_dynamic_processor",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"DynamicProcessor\" Source/DSP/ParametricBand.h Source/DSP/ParametricBand.cpp"
+        ]
+      },
+      {
+        "name": "cmake_configure_only",
+        "command": [
+          "bash",
+          "-lc",
+          "cmake -S . -B build/phase-c-configure -DSHREDEQ_CONFIGURE_ONLY=ON"
+        ]
+      }
+    ]
+  }
+}

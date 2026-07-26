@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "task_id": "a.3",
+  "phase": "A",
+  "phase_id": "a",
+  "title": "StateManager (A/B, factory/user presets, schema versioning) and PluginEditor skeleton",
+  "description": "Add StateManager for schema-versioned XML state, A/B slots, factory/user presets, and a minimal PluginEditor skeleton wired from the processor.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\nDo not modify CMakeLists.txt unless editor/state sources cannot otherwise be linked\u2014prefer this task's files only; if CMake must list StateManager.cpp, that path ownership for CMake is a.2; code StateManager so processor can include it once a future fan-in owns CMake. For this wave, implement StateManager and PluginEditor fully; update PluginProcessor only if createEditor/state APIs must wire StateManager\u2014PluginProcessor is owned by a.2 for this phase, so wire editor via existing createEditor/getAPVTS APIs without editing processor if possible. fill createEditor by editing PluginEditor only and ensure Processor already calls new ShredEQAudioProcessorEditor(*this). If Processor still returns nullptr/hasEditor false, editing PluginProcessor is forbidden here\u2014document glue required, but stage goal requires editor integration: ALLOW minimal PluginProcessor.etouch for StateManager member and createEditor body only when unavoidable. Prefer allowed_write_paths excluding PluginProcessor; put preset/state API on StateManager used later. PluginEditor skeleton constructs with processor reference and empty paint/resized.\n\nBefore editing, inspect:\n- Source/PluginProcessor.h/.cpp from a.2 (APVTS, get/setStateInformation, createEditor)\n- /home/mike/dev/mike/music/plugins/shredboost/Source/PluginEditor.h/.cpp\n- ShredBoost/ShredSpace Resources/Presets patterns if present\n- juce::File::getSpecialLocation user app data conventions\n\nImplement:\n1. Source/StateManager.h and Source/StateManager.cpp\n   - Owns schema_version constant (match processor stub, e.g. 1).\n   - A/B slot storage: two ValueTrees or MemoryBlocks; methods to captureFrom(APVTS), applyTo(APVTS), swap, copy A\u2192B / B\u2192A.\n   - Factory presets: load read-only from Resources/Presets/ (directory relative to executable or BinaryData later). Provide listFactoryPresets() and loadFactoryPreset(name, APVTS). If Resources/Presets is empty, support zero presets without crash; optionally add Resources/Presets/.gitkeep via not allowed\u2014skip creating resources if not in allowed paths; tolerate missing directory.\n   - User presets: directory under juce::File::getSpecialLocation(userApplicationDataDirectory) / \"nSpace Systems\" / \"ShredEQ\" / \"Presets\" (or equivalent). saveUserPreset, loadUserPreset, listUserPresets using XML.\n   - XML root includes schema_version; reject or migrate unknown future versions conservatively (refuse load if version > supported; accept ==).\n   - No GUI; pure logic + file IO on message thread (document not RT-safe).\n\n2. Source/PluginEditor.h and Source/PluginEditor.cpp\n   - class ShredEQAudioProcessorEditor : juce::AudioProcessorEditor\n   - Constructor takes ShredEQAudioProcessor&; setSize to a modest default (e.g. 960\u00d7600).\n   - paint fills background; resized empty stub.\n   - Hold reference to processor; no APVTS attachments required yet.\n\nIf createEditor is not yet implemented in processor from a.2, only PluginEditor can not fix that\u2014task success is editor and StateManager files existing and self-consistent.\n\nDo NOT expand cmake formats, ParameterIDs inventory, or DSP.",
+  "acceptance_criteria": [
+    "Source/StateManager.h and Source/StateManager.cpp exist with schema_version, A/B capture/apply/swap, factory preset load path under Resources/Presets/, and user preset path via juce::File::getSpecialLocation",
+    "StateManager XML includes schema_version and refuses newer unsupported versions",
+    "Source/PluginEditor.h and Source/PluginEditor.cpp define ShredEQAudioProcessorEditor subclassing juce::AudioProcessorEditor with non-zero setSize and paint/resized stubs",
+    "PluginEditor constructs from ShredEQAudioProcessor reference",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "antigravity_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/StateManager.h",
+    "Source/StateManager.cpp",
+    "Source/PluginEditor.h",
+    "Source/PluginEditor.cpp"
+  ],
+  "forbidden_changes": [
+    "modify CMakeLists.txt, CMakePresets.json, scripts/**, .gitmodules",
+    "modify Source/ParameterIDs.h",
+    "modify Source/PluginProcessor.h or Source/PluginProcessor.cpp",
+    "implement EQ DSP or analyzer views",
+    "add third-party dependencies",
+    "write factory preset binaries outside Source (resources fan-in is later)"
+  ],
+  "allowed_symbols": [
+    "StateManager",
+    "ShredEQAudioProcessorEditor",
+    "captureFrom",
+    "applyTo",
+    "swapAB",
+    "listFactoryPresets",
+    "loadFactoryPreset",
+    "saveUserPreset",
+    "loadUserPreset",
+    "listUserPresets",
+    "schema_version"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "XML ValueTree preset format with schema_version",
+      "A/B as two slots in StateManager",
+      "user preset directory under nSpace Systems/ShredEQ application data",
+      "minimal blank editor chrome"
+    ],
+    "forbidden": [
+      "take over APVTS parameter inventory ownership",
+      "redesign CMake plugin metadata",
+      "build full diagnostic three-view GUI",
+      "realtime file IO inside processBlock"
+    ]
+  },
+  "dependencies": [
+    "a.2"
+  ],
+  "task_timeout_seconds": 1200,
+  "verification_commands": []
+}

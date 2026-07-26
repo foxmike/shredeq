@@ -1,0 +1,70 @@
+{
+  "verification": {
+    "checks": [
+      {
+        "name": "phase_h_files_exist",
+        "command": [
+          "bash",
+          "-lc",
+          "test -f Source/DSP/MidSideRouter.h && test -f Source/DSP/MidSideRouter.cpp && test -f Source/DSP/SidechainAnalyzer.h && test -f Source/DSP/SidechainAnalyzer.cpp && test -f Source/DSP/MaskingCarver.h && test -f Source/DSP/MaskingCarver.cpp && test -f Source/DSP/MonoGuard.h && test -f Source/DSP/MonoGuard.cpp && test -f Source/DSP/LookaheadDelay.h && test -f Source/DSP/LookaheadDelay.cpp && test -f tests/MidSideTests.cpp && test -f tests/LookaheadTests.cpp"
+        ]
+      },
+      {
+        "name": "cmake_lists_lists_phase_h_sources",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"MidSideRouter\\.cpp\" CMakeLists.txt && rg -q \"SidechainAnalyzer\\.cpp\" CMakeLists.txt && rg -q \"MaskingCarver\\.cpp\" CMakeLists.txt && rg -q \"MonoGuard\\.cpp\" CMakeLists.txt && rg -q \"LookaheadDelay\\.cpp\" CMakeLists.txt && rg -q \"MidSideTests\\.cpp\" CMakeLists.txt && rg -q \"LookaheadTests\\.cpp\" CMakeLists.txt"
+        ]
+      },
+      {
+        "name": "midside_router_encode_decode_and_side_hpf",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"encode|Encode|decode|Decode|Mid|Side\" Source/DSP/MidSideRouter.h Source/DSP/MidSideRouter.cpp && rg -q \"HighPass|highPass|HPF|sideHighPass|120|300\" Source/DSP/MidSideRouter.h Source/DSP/MidSideRouter.cpp"
+        ]
+      },
+      {
+        "name": "sidechain_masking_metric_and_carver",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"Overlap|Dominance|Masking|ERB|octave\" Source/DSP/SidechainAnalyzer.h Source/DSP/SidechainAnalyzer.cpp && rg -q \"G_carve|carve|Carve|suggestion|Suggestion|G_max|threshold\" Source/DSP/MaskingCarver.h Source/DSP/MaskingCarver.cpp"
+        ]
+      },
+      {
+        "name": "monoguard_coherence_and_protection",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"rho|coherence|S_LR|protection|Protection\" Source/DSP/MonoGuard.h Source/DSP/MonoGuard.cpp"
+        ]
+      },
+      {
+        "name": "lookahead_modes_and_latency_api",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"0\\.5|1|2|5|LookaheadMode|getLatencySamples\" Source/DSP/LookaheadDelay.h Source/DSP/LookaheadDelay.cpp && rg -q \"circular|delay|crossfade|Crossfade|buffer\" Source/DSP/LookaheadDelay.h Source/DSP/LookaheadDelay.cpp"
+        ]
+      },
+      {
+        "name": "plugin_processor_phase_h_wiring",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"MidSideRouter|SidechainAnalyzer|MaskingCarver|MonoGuard|LookaheadDelay\" Source/PluginProcessor.h Source/PluginProcessor.cpp && rg -q \"setLatencySamples\" Source/PluginProcessor.h Source/PluginProcessor.cpp"
+        ]
+      },
+      {
+        "name": "phase_h_tests_coverage_mentions",
+        "command": [
+          "bash",
+          "-lc",
+          "rg -q \"MidSideRouter|encode|decode|Masking|Sidechain|carve\" tests/MidSideTests.cpp && rg -q \"LookaheadDelay|getLatencySamples|0\\.5|latency\" tests/LookaheadTests.cpp"
+        ]
+      }
+    ]
+  }
+}

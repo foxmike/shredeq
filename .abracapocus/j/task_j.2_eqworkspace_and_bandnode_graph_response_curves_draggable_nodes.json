@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "task_id": "j.2",
+  "phase": "J",
+  "phase_id": "j",
+  "title": "EQWorkspace and BandNode \u2014 graph, response curves, draggable nodes",
+  "description": "Implement the main EQ graph workspace and per-band draggable nodes per SHREDEQ_SPEC.md \u00a713.3, \u00a713.4, \u00a713.8.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- .abracapocus/SHREDEQ_SPEC.md \u00a713.3 main EQ workspace overlays, \u00a713.4 band node visual state, \u00a713.8 interaction design\n- Source/UI/ShredEQLookAndFeel.* palette colours from j.1\n- Source/DSP/ResponseComputer.* magnitude/phase curve API from phase B (read-only consume)\n- Source/UI/PercentileCloud.* / ResonancePersistenceMap.* / NoteRulerData.* snapshot getters from phase I (display hooks only)\n- Source/ParameterIDs.h band parameter ID patterns\n- Source/PluginProcessor.h accessors for band params / response snapshots if present\n\nImplement Source/UI/BandNode.h/.cpp:\n1. Component (or lightweight drawable owned by EQWorkspace) representing one parametric band.\n2. Visual state: band number, filter-type glyph, stage badge, current gain, dynamic activity ring, M/S or channel routing glyph, tracking indicator, sidechain indicator, bypass dimming, selection highlight.\n3. Dynamic nodes: center handle = static gain, outer range handle = max dynamic movement, live position = actual modulated gain when dynamics data available; provide setter APIs even if processor feed is assembled later.\n4. Hit-testing helpers for center vs range handle.\n\nImplement Source/UI/EQWorkspace.h/.cpp:\n1. juce::Component hosting log-frequency X axis and gain Y axis (\u00b124 dB default).\n2. Paint layered in order (each toggleable via bool flags / methods): grid, pre/post spectra placeholders, percentile cloud fill hook, dynamic-range map hook, resonance candidates, note guides, sidechain collision regions, composite / Stage A / adaptive / Stage B response curves, phase response when enabled, BandNode overlays.\n3. Interaction (\u00a713.8): double-click empty graph \u2192 create bell band callback; modifier+double-click \u2192 filter-type selection callback; horizontal drag \u2192 frequency; vertical drag \u2192 gain; wheel/gesture \u2192 Q; modifier drag \u2192 fine adjust; drag range handle \u2192 dynamic range; Delete \u2192 remove selected band callback; headphone/delta icon hit areas call solo / hear-removed callbacks. Wire changes through APVTS attachments or listener callbacks supplied by the editor \u2014 do not own PluginEditor.\n4. Accept external curve buffers (ResponseComputer output) and analyzer snapshot views without re-owning FFT engines.\n5. Coordinate mapping helpers: frequencyToX/xToFrequency (log), gainToY/yToGain (linear dB).\n6. Selection model: selectedBandIndex with change callbacks for InspectorPanel consumers.\n\nDo not modify PluginEditor, CMakeLists.txt, or InspectorPanel/IntelligenceDrawer. verification_commands left empty.",
+  "acceptance_criteria": [
+    "Source/UI/EQWorkspace.h/.cpp and Source/UI/BandNode.h/.cpp exist",
+    "EQWorkspace paints a log-frequency vs \u00b124 dB gain graph with composite response curve drawing path",
+    "EQWorkspace exposes toggleable overlay hooks for spectra/percentile/resonance/note/sidechain/phase layers",
+    "BandNode visual state includes band number, filter type, stage, gain, dynamic activity, routing, tracking/sidechain indicators, bypass and selection",
+    "Dynamic band handles distinguish static gain center, max dynamic range outer handle, and current gain position APIs",
+    "EQWorkspace maps drag/wheel interactions to frequency, gain, and Q with fine-adjust modifier support and selection callbacks",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "antigravity_cli",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "Source/UI/EQWorkspace.h",
+    "Source/UI/EQWorkspace.cpp",
+    "Source/UI/BandNode.h",
+    "Source/UI/BandNode.cpp"
+  ],
+  "forbidden_changes": [
+    "modify Source/PluginEditor.*",
+    "modify CMakeLists.txt or CMakePresets.json",
+    "modify Source/PluginProcessor.*",
+    "modify Source/UI/ShredEQLookAndFeel.*",
+    "modify Source/UI/InspectorPanel.* or Source/UI/IntelligenceDrawer.*",
+    "rewrite ResponseComputer or SpectralAnalysisEngine algorithms",
+    "own a second FFT/STFT engine",
+    "add third-party plotting libraries"
+  ],
+  "allowed_symbols": [
+    "EQWorkspace",
+    "BandNode",
+    "frequencyToX",
+    "xToFrequency",
+    "gainToY",
+    "yToGain",
+    "setSelectedBand",
+    "getSelectedBand",
+    "setResponseCurves",
+    "setOverlayFlags",
+    "paint",
+    "resized",
+    "mouseDown",
+    "mouseDrag",
+    "mouseDoubleClick",
+    "mouseWheelMove"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "BandNode as Component children or workspace-owned drawables",
+      "callback/listener interfaces for create/remove/param change without owning APVTS",
+      "placeholder paths when analyzer snapshots are null",
+      "\u00b124 dB default gain axis extensible via setter"
+    ],
+    "forbidden": [
+      "PluginEditor fan-in layout",
+      "CMake source registration",
+      "implementing full inspector parameter grid",
+      "DSP coefficient redesign"
+    ]
+  },
+  "dependencies": [
+    "j.1"
+  ],
+  "verification_commands": [],
+  "task_timeout_seconds": 1200
+}

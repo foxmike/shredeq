@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "task_id": "f.3",
+  "phase": "F",
+  "phase_id": "f",
+  "title": "Pitch tracking and note follower tests",
+  "description": "Add juce::UnitTest coverage for PitchDetector and NoteFollower behavior per SHREDEQ_SPEC.md \u00a79 and \u00a721.7.\n\nSTRICT FILE SCOPE: Create or modify ONLY the files listed in this task's allowed_write_paths.\n\nBefore editing, inspect:\n- Source/DSP/PitchDetector.* and Source/DSP/NoteFollower.* public APIs from f.1/f.2\n- Source/DSP/ParametricBand.* optional follower hooks if needed for a light integration case\n- tests/TestMain.cpp and existing tests/*Tests.cpp patterns (phases B\u2013E)\n- CMakeLists.txt as left by f.2 (tests/PitchTrackingTests.cpp should already be listed \u2014 do not edit CMake unless the entry is missing)\n- .abracapocus/SHREDEQ_SPEC.md \u00a79.2\u20139.5 and \u00a721.7 (guitar/bass fundamentals, bends/vibrato intent, silence, chords/low-confidence, MIDI priority)\n\nImplement tests/PitchTrackingTests.cpp:\n1. YIN on steady sines near guitar/bass fundamentals (e.g. E2 ~82.4 Hz, A2 ~110 Hz, E4 ~329.6 Hz): estimated f0 within a documented tolerance (cents or relative Hz) once confidence is high / tracking Locked.\n2. Low bass fundamental (e.g. ~40\u201350 Hz) still yields finite, in-range f0 when window/downsample supports it; document any skip if min frequency config excludes the case.\n3. Silence / near-zero noise \u2192 low confidence and non-Locked tracking state (no spurious stable high-confidence pitch).\n4. ADHD/noise or multi-tone chord-like mixture \u2192 confidence does not falsely claim strong monophonic lock (low or unstable confidence acceptable).\n5. MIDI path: noteToFrequency / priority Lowest vs Highest vs Last on a small held-note set matches f0 = 440*2^((m-69)/12) exactly within float tolerance.\n6. NoteFollower: for fixed f0, h=2, c=0 \u2192 f_target\u22482*f0; with cents=+100 \u2192 multiply by 2^(100/1200); log smoothing moves monotonically toward target without non-finite values; below confidence threshold, hold-then-fade/return behavior leaves frequency finite and approaches home/neutral per API defaults.\n7. Optional light ParametricBand check: enable follower with stable f0 and assert band center frequency tracks toward f_smooth (if public getter exists); skip deep filter response tests.\n8. Use juce::UnitTest; no new third-party test frameworks. Do not rewrite production DSP solely to force green tests \u2014 only assert documented tolerances.\n\nverification_commands left empty \u2014 C++ adapter infers cmake/ctest.",
+  "acceptance_criteria": [
+    "tests/PitchTrackingTests.cpp exists and registers juce::UnitTest coverage for PitchDetector and NoteFollower",
+    "Steady sine fundamentals (guitar/bass range) assert f0 within documented tolerance at high confidence",
+    "Silence/noise and chord-like mixtures assert low or non-Locked confidence rather than false strong monophonic lock",
+    "MIDI note frequency and lowest/highest/last priority behaviors are asserted against f0 = 440*2^((m-69)/12)",
+    "NoteFollower harmonic/cents targeting and log-smoothed frequency plus low-confidence hold/fade behavior are covered with finite-output checks",
+    "No production DSP algorithm rewrites solely to force green tests",
+    "No file outside the task's allowed_write_paths is created or modified"
+  ],
+  "selected_backend": "pi_cli",
+  "model": "openrouter/z-ai/glm-5.2",
+  "verification_profile": "focused",
+  "allowed_write_paths": [
+    "tests/PitchTrackingTests.cpp"
+  ],
+  "forbidden_changes": [
+    "modify Source/DSP/PitchDetector.*",
+    "modify Source/DSP/NoteFollower.*",
+    "modify Source/DSP/ParametricBand.*",
+    "modify Source/PluginProcessor.*",
+    "modify CMakeLists.txt except emergency single-line append of missing PitchTrackingTests.cpp",
+    "modify CMakePresets.json",
+    "modify Source/PluginEditor.*",
+    "add Catch2/GoogleTest/third-party test frameworks",
+    "change production DSP algorithms solely to force green tests"
+  ],
+  "allowed_symbols": [
+    "PitchTrackingTests",
+    "runTest",
+    "PitchDetector",
+    "NoteFollower",
+    "ParametricBand",
+    "MidiPriority",
+    "TrackingState"
+  ],
+  "decision_budget": {
+    "allowed": [
+      "juce::UnitTest subclass in tests/PitchTrackingTests.cpp",
+      "synthetic sines, noise, and simple multi-tone fixtures",
+      "cents/relative-Hz tolerances for pitch estimates",
+      "emergency CMake one-line append only if test source missing from target"
+    ],
+    "forbidden": [
+      "processor/editor wiring",
+      "broad CMake refactors",
+      "host integration or pluginval runs inside this unit test",
+      "requiring sample-identical audio output"
+    ]
+  },
+  "dependencies": [
+    "f.1",
+    "f.2"
+  ],
+  "verification_commands": [],
+  "task_timeout_seconds": 900
+}

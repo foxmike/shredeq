@@ -301,12 +301,14 @@ void ShredEQAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
 {
     tightCut.prepare (sampleRate, samplesPerBlock);
     chugStabilizer.prepare (sampleRate, samplesPerBlock);
+    multibandEngine.prepare (sampleRate, samplesPerBlock);
 }
 
 void ShredEQAudioProcessor::releaseResources()
 {
     tightCut.reset();
     chugStabilizer.reset();
+    multibandEngine.reset();
 }
 
 bool ShredEQAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -360,6 +362,7 @@ void ShredEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     {
         tightCut.reset();
         chugStabilizer.reset();
+        multibandEngine.reset();
         return;
     }
 
@@ -402,7 +405,48 @@ void ShredEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     chugStabilizer.setTransientSensitivity (getFloatParam (ShredEQ::ParameterIDs::Chug::transientSens) / 100.0);
     chugStabilizer.setDominanceSensitivity (getFloatParam (ShredEQ::ParameterIDs::Chug::dominanceSens) / 100.0);
 
-    // 3. Process DSP Chain
+    // 3. Update MultibandEngine parameters
+    multibandEngine.setEnabled (getBoolParam (ShredEQ::ParameterIDs::multibandEnabled));
+    multibandEngine.setCrossoverHz (0, getFloatParam (ShredEQ::ParameterIDs::multibandCrossovers[0]));
+    multibandEngine.setCrossoverHz (1, getFloatParam (ShredEQ::ParameterIDs::multibandCrossovers[1]));
+    multibandEngine.setCrossoverHz (2, getFloatParam (ShredEQ::ParameterIDs::multibandCrossovers[2]));
+
+    for (std::size_t index = 0; index < 4; ++index)
+    {
+        const auto& zone = ShredEQ::ParameterIDs::multibandZones[index];
+        multibandEngine.setZoneGainDb (index, getFloatParam (zone.gain));
+        multibandEngine.setZoneThresholdDb (index, getFloatParam (zone.threshold));
+        multibandEngine.setZoneRatio (index, getFloatParam (zone.ratio));
+        multibandEngine.setZoneAttackMs (index, getFloatParam (zone.attack));
+        multibandEngine.setZoneReleaseMs (index, getFloatParam (zone.release));
+        multibandEngine.setZoneTransientEmphasis (index, getFloatParam (zone.transientEmphasis));
+        multibandEngine.setZoneSustainEmphasis (index, getFloatParam (zone.sustainEmphasis));
+        
+        const auto placementChoice = static_cast<int> (std::round (getFloatParam (zone.placement)));
+        multibandEngine.setZonePlacement (index, static_cast<ShredEQ::DSP::MultibandZone::Placement> (placementChoice));
+        
+        const auto detChoice = static_cast<int> (std::round (getFloatParam (zone.detectorSource)));
+        multibandEngine.setZoneDetectorSource (index, static_cast<ShredEQ::DSP::DetectorSource> (detChoice));
+        
+        multibandEngine.setZoneAutoThreshold (index, getBoolParam (zone.autoThreshold));
+        
+        const auto modeChoice = static_cast<int> (std::round (getFloatParam (zone.mode)));
+        multibandEngine.setZoneUpward (index, modeChoice == 1);
+    }
+
+    // 4. Extract sidechain buffer if the bus is active
+    const juce::AudioBuffer<float>* sidechainBufferPtr = nullptr;
+    juce::AudioBuffer<float> sidechainBuffer;
+    if (auto* bus = getBus (true, 1))
+    {
+        if (bus->isEnabled())
+        {
+            sidechainBuffer = getBusBuffer (buffer, true, 1);
+            sidechainBufferPtr = &sidechainBuffer;
+        }
+    }
+
+    // 5. Process DSP Chain
     const auto placement = static_cast<ShredEQ::DSP::TightCut::Placement> (tcPlacementChoice);
     auto* const* channels = buffer.getArrayOfWritePointers();
     const auto numChannels = buffer.getNumChannels();
@@ -418,6 +462,9 @@ void ShredEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     chugStabilizer.process (channels, numChannels, numSamples);
 
     // Stage A / EQ processing would happen here
+
+    // Multiband Engine processing
+    multibandEngine.process (buffer, sidechainBufferPtr);
 
     // Post Stage A processing
     if (placement == ShredEQ::DSP::TightCut::Placement::postStageA)

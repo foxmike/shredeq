@@ -52,6 +52,9 @@ target_sources(ShredEQ
         Source/DSP/ResponseComputer.cpp
         Source/DSP/TightCut.cpp
         Source/DSP/ChugStabilizer.cpp
+        Source/DSP/MultibandCrossover.cpp
+        Source/DSP/MultibandZone.cpp
+        Source/DSP/MultibandEngine.cpp
 )
 
 target_compile_definitions(ShredEQ PRIVATE
@@ -74,6 +77,11 @@ target_link_libraries(ShredEQ
 
 enable_testing()
 
+set(MULTIBAND_TEST_SRC)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/MultibandTests.cpp")
+    set(MULTIBAND_TEST_SRC tests/MultibandTests.cpp)
+endif()
+
 add_executable(ShredEQUnitTests
     tests/TestMain.cpp
     tests/BiquadTests.cpp
@@ -82,6 +90,7 @@ add_executable(ShredEQUnitTests
     tests/TightCutTests.cpp
     tests/ChugStabilizerTests.cpp
     tests/DbgTests.cpp
+    ${MULTIBAND_TEST_SRC}
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
     Source/DSP/BiquadCoefficients.cpp
@@ -92,6 +101,9 @@ add_executable(ShredEQUnitTests
     Source/DSP/ResponseComputer.cpp
     Source/DSP/TightCut.cpp
     Source/DSP/ChugStabilizer.cpp
+    Source/DSP/MultibandCrossover.cpp
+    Source/DSP/MultibandZone.cpp
+    Source/DSP/MultibandEngine.cpp
 )
 
 target_compile_definitions(ShredEQUnitTests PRIVATE

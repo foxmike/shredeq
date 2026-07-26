@@ -4,6 +4,7 @@
 #include "BiquadCoefficients.h"
 #include "TPTFilter.h"
 #include "DynamicProcessor.h"
+#include "NoteFollower.h"
 #include <array>
 #include <atomic>
 
@@ -175,6 +176,21 @@ public:
 
     DynamicVisualizationData getDynamicVisualizationData() const noexcept;
 
+    // Note Follower Integration
+    void attachNoteFollower (NoteFollower* follower) noexcept;
+    void setNoteFollowerEnabled (bool shouldBeEnabled) noexcept;
+    bool isNoteFollowerEnabled() const noexcept;
+    void applyNoteFollower() noexcept;
+
+    void setHarmonic (int harmonic) noexcept;
+    void setCentsOffset (double cents) noexcept;
+    void setConfidenceThreshold (double threshold) noexcept;
+    void setSmoothing (double smoothingMs) noexcept;
+    void setHoldTimeMs (double holdTimeMs) noexcept;
+    void setReturnTimeMs (double returnTimeMs) noexcept;
+    void setHomeFrequencyHz (double homeFreq) noexcept;
+    void setFrequencyLimits (double minFreq, double maxFreq) noexcept;
+
 private:
     bool shouldUseTpt() const noexcept;
     bool shouldFilterChannel (int channelIndex, bool isMidSideDomain) const noexcept;
@@ -248,6 +264,11 @@ private:
     DynamicProcessor dynamicProcessor;
     float lastOutputL = 0.0f;
     float lastOutputR = 0.0f;
+
+    // Note Follower
+    NoteFollower noteFollower;
+    std::atomic<bool> noteFollowerEnabled { false };
+    std::atomic<NoteFollower*> attachedFollower { nullptr };
 };
 
 inline constexpr int kNumParametricBands = 12;

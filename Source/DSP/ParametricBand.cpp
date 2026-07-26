@@ -7,6 +7,8 @@ namespace ShredEQ::DSP
 
 ParametricBand::ParametricBand() noexcept
 {
+    attachedFollower = &noteFollower;
+
     smoothedFrequency.setCurrentAndTargetValue (targetFrequency);
     smoothedGain.setCurrentAndTargetValue (targetGainDb);
     smoothedQ.setCurrentAndTargetValue (targetQ);
@@ -35,6 +37,7 @@ void ParametricBand::prepare (double sampleRate, int maxBlockSize) noexcept
 
     tptFilter.prepare (currentSampleRate);
     dynamicProcessor.prepare (currentSampleRate);
+    noteFollower.prepare (currentSampleRate);
 
     reset();
 }
@@ -44,6 +47,7 @@ void ParametricBand::reset() noexcept
     biquadStates = {};
     tptFilter.reset();
     dynamicProcessor.reset();
+    noteFollower.reset();
 
     lastOutputL = 0.0f;
     lastOutputR = 0.0f;
@@ -68,6 +72,8 @@ void ParametricBand::process (float* const* channels, int numChannels, int numSa
 {
     if (!enabled.load())
         return;
+
+    applyNoteFollower();
 
     const auto limitChannels = std::min (numChannels, 2);
     if (limitChannels <= 0 || numSamples <= 0)
@@ -538,6 +544,8 @@ double ParametricBand::getDetectorQ() const noexcept
 void ParametricBand::setTrackingSource (int source) noexcept
 {
     trackingSource = source;
+    if (auto* follower = attachedFollower.load())
+        follower->setTrackingSource (source);
 }
 
 int ParametricBand::getTrackingSource() const noexcept
@@ -548,11 +556,105 @@ int ParametricBand::getTrackingSource() const noexcept
 void ParametricBand::setTrackingHarmonic (int harmonic) noexcept
 {
     trackingHarmonic = harmonic;
+    if (auto* follower = attachedFollower.load())
+        follower->setHarmonic (harmonic);
 }
 
 int ParametricBand::getTrackingHarmonic() const noexcept
 {
     return trackingHarmonic.load();
+}
+
+void ParametricBand::attachNoteFollower (NoteFollower* follower) noexcept
+{
+    attachedFollower = follower != nullptr ? follower : &noteFollower;
+    
+    // Sync current settings to the new follower
+    if (follower != nullptr)
+    {
+        follower->setTrackingSource (trackingSource.load());
+        follower->setHarmonic (trackingHarmonic.load());
+    }
+}
+
+void ParametricBand::setNoteFollowerEnabled (bool shouldBeEnabled) noexcept
+{
+    noteFollowerEnabled = shouldBeEnabled;
+}
+
+bool ParametricBand::isNoteFollowerEnabled() const noexcept
+{
+    return noteFollowerEnabled.load();
+}
+
+void ParametricBand::applyNoteFollower() noexcept
+{
+    if (noteFollowerEnabled.load())
+    {
+        if (auto* follower = attachedFollower.load())
+        {
+            if (follower->isEnabled() && !follower->isBypassed())
+            {
+                const double f_follower = follower->getSmoothedFrequencyHz();
+                const float followGain = follower->getFollowGain();
+                double f_target = followGain * f_follower + (1.0 - followGain) * targetFrequency;
+                f_target = std::clamp (f_target, 15.0, 24000.0);
+                smoothedFrequency.setTargetValue (f_target);
+                return;
+            }
+        }
+    }
+    
+    // Default to legacy static/manual target frequency
+    smoothedFrequency.setTargetValue (targetFrequency);
+}
+
+void ParametricBand::setHarmonic (int harmonic) noexcept
+{
+    if (auto* follower = attachedFollower.load())
+        follower->setHarmonic (harmonic);
+}
+
+void ParametricBand::setCentsOffset (double cents) noexcept
+{
+    if (auto* follower = attachedFollower.load())
+        follower->setCentsOffset (cents);
+}
+
+void ParametricBand::setConfidenceThreshold (double threshold) noexcept
+{
+    if (auto* follower = attachedFollower.load())
+        follower->setConfidenceThreshold (threshold);
+}
+
+void ParametricBand::setSmoothing (double smoothingMs) noexcept
+{
+    if (auto* follower = attachedFollower.load())
+        follower->setSmoothing (smoothingMs);
+}
+
+void ParametricBand::setHoldTimeMs (double holdTimeMs) noexcept
+{
+    if (auto* follower = attachedFollower.load())
+        follower->setHoldTimeMs (holdTimeMs);
+}
+
+void ParametricBand::setReturnTimeMs (double returnTimeMs) noexcept
+{
+    if (auto* follower = attachedFollower.load())
+        follower->setReturnTimeMs (returnTimeMs);
+}
+
+void ParametricBand::setHomeFrequencyHz (double homeFreq) noexcept
+{
+    if (auto* follower = attachedFollower.load())
+        follower->setHomeFrequencyHz (homeFreq);
+}
+
+void ParametricBand::setFrequencyLimits (double minFreq, double maxFreq) noexcept
+{
+    if (auto* follower = attachedFollower.load())
+        follower->setFrequencyLimits (minFreq, maxFreq);
 }
 
 void ParametricBand::setLookaheadMs (double ms) noexcept

@@ -55,6 +55,8 @@ target_sources(ShredEQ
         Source/DSP/MultibandCrossover.cpp
         Source/DSP/MultibandZone.cpp
         Source/DSP/MultibandEngine.cpp
+        Source/DSP/PitchDetector.cpp
+        Source/DSP/NoteFollower.cpp
 )
 
 target_compile_definitions(ShredEQ PRIVATE
@@ -90,6 +92,7 @@ add_executable(ShredEQUnitTests
     tests/TightCutTests.cpp
     tests/ChugStabilizerTests.cpp
     tests/DbgTests.cpp
+    tests/PitchTrackingTests.cpp
     ${MULTIBAND_TEST_SRC}
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
@@ -104,6 +107,8 @@ add_executable(ShredEQUnitTests
     Source/DSP/MultibandCrossover.cpp
     Source/DSP/MultibandZone.cpp
     Source/DSP/MultibandEngine.cpp
+    Source/DSP/PitchDetector.cpp
+    Source/DSP/NoteFollower.cpp
 )
 
 target_compile_definitions(ShredEQUnitTests PRIVATE

@@ -61,6 +61,10 @@ target_sources(ShredEQ
         Source/Analysis/SpectralAnalysisEngine.cpp
         Source/DSP/ResonanceDetector.cpp
         Source/DSP/ResonanceSuppressor.cpp
+        Source/DSP/MidSideRouter.cpp
+        Source/DSP/SidechainAnalyzer.cpp
+        Source/DSP/MaskingCarver.cpp
+        Source/DSP/LookaheadDelay.cpp
 )
 
 target_compile_definitions(ShredEQ PRIVATE
@@ -93,6 +97,16 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/ResonanceTests.cpp")
     set(RESONANCE_TEST_SRC tests/ResonanceTests.cpp)
 endif()
 
+set(MIDSIDE_TEST_SRC)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/MidSideTests.cpp")
+    set(MIDSIDE_TEST_SRC tests/MidSideTests.cpp)
+endif()
+
+set(LOOKAHEAD_TEST_SRC)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/LookaheadTests.cpp")
+    set(LOOKAHEAD_TEST_SRC tests/LookaheadTests.cpp)
+endif()
+
 add_executable(ShredEQUnitTests
     tests/TestMain.cpp
     tests/BiquadTests.cpp
@@ -104,6 +118,8 @@ add_executable(ShredEQUnitTests
     tests/PitchTrackingTests.cpp
     ${RESONANCE_TEST_SRC}
     ${MULTIBAND_TEST_SRC}
+    ${MIDSIDE_TEST_SRC}
+    ${LOOKAHEAD_TEST_SRC}
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
     Source/DSP/BiquadCoefficients.cpp
@@ -123,6 +139,10 @@ add_executable(ShredEQUnitTests
     Source/Analysis/SpectralAnalysisEngine.cpp
     Source/DSP/ResonanceDetector.cpp
     Source/DSP/ResonanceSuppressor.cpp
+    Source/DSP/MidSideRouter.cpp
+    Source/DSP/SidechainAnalyzer.cpp
+    Source/DSP/MaskingCarver.cpp
+    Source/DSP/LookaheadDelay.cpp
 )
 
 target_compile_definitions(ShredEQUnitTests PRIVATE

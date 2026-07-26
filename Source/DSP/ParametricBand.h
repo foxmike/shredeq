@@ -3,6 +3,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include "BiquadCoefficients.h"
 #include "TPTFilter.h"
+#include "DynamicProcessor.h"
 #include <array>
 #include <atomic>
 
@@ -91,8 +92,8 @@ public:
         Crucially, this band does NOT do M/S conversion internally.
         It expects the input domain to match isMidSide.
     */
-    void process (float* const* channels, int numChannels, int numSamples, bool isMidSide) noexcept;
-    void process (juce::AudioBuffer<float>& buffer, bool isMidSide) noexcept;
+    void process (float* const* channels, int numChannels, int numSamples, bool isMidSide, const float* const* sidechainChannels = nullptr, int numSidechainChannels = 0) noexcept;
+    void process (juce::AudioBuffer<float>& buffer, bool isMidSide, const float* const* sidechainChannels = nullptr, int numSidechainChannels = 0) noexcept;
 
     // Getters and Setters
     void setEnabled (bool shouldBeEnabled) noexcept;
@@ -126,48 +127,53 @@ public:
     void setModulated (bool modulated) noexcept;
     bool getModulated() const noexcept;
 
-    // Dynamic EQ stub setters and getters
-    void setDynamicMode (int mode) noexcept { dynamicMode = mode; }
-    int getDynamicMode() const noexcept { return dynamicMode; }
+    // Dynamic EQ setters and getters
+    void setDynamicMode (int mode) noexcept;
+    int getDynamicMode() const noexcept;
     
-    void setDynamicRangeDb (double range) noexcept { dynamicRangeDb = range; }
-    double getDynamicRangeDb() const noexcept { return dynamicRangeDb; }
+    void setDynamicRangeDb (double range) noexcept;
+    double getDynamicRangeDb() const noexcept;
     
-    void setThresholdDb (double thresh) noexcept { thresholdDb = thresh; }
-    double getThresholdDb() const noexcept { return thresholdDb; }
+    void setThresholdDb (double thresh) noexcept;
+    double getThresholdDb() const noexcept;
     
-    void setRatio (double r) noexcept { ratio = r; }
-    double getRatio() const noexcept { return ratio; }
+    void setRatio (double r) noexcept;
+    double getRatio() const noexcept;
     
-    void setAttackMs (double a) noexcept { attackMs = a; }
-    double getAttackMs() const noexcept { return attackMs; }
+    void setAttackMs (double a) noexcept;
+    double getAttackMs() const noexcept;
     
-    void setHoldMs (double h) noexcept { holdMs = h; }
-    double getHoldMs() const noexcept { return holdMs; }
+    void setHoldMs (double h) noexcept;
+    double getHoldMs() const noexcept;
     
-    void setReleaseMs (double r) noexcept { releaseMs = r; }
-    double getReleaseMs() const noexcept { return releaseMs; }
+    void setReleaseMs (double r) noexcept;
+    double getReleaseMs() const noexcept;
     
-    void setKneeDb (double k) noexcept { kneeDb = k; }
-    double getKneeDb() const noexcept { return kneeDb; }
+    void setKneeDb (double k) noexcept;
+    double getKneeDb() const noexcept;
     
-    void setDetectorSource (int source) noexcept { detectorSource = source; }
-    int getDetectorSource() const noexcept { return detectorSource; }
+    void setDetectorSource (int source) noexcept;
+    int getDetectorSource() const noexcept;
     
-    void setDetectorFrequency (double freq) noexcept { detectorFrequency = freq; }
-    double getDetectorFrequency() const noexcept { return detectorFrequency; }
+    void setDetectorFrequency (double freq) noexcept;
+    double getDetectorFrequency() const noexcept;
     
-    void setDetectorQ (double qVal) noexcept { detectorQ = qVal; }
-    double getDetectorQ() const noexcept { return detectorQ; }
+    void setDetectorQ (double qVal) noexcept;
+    double getDetectorQ() const noexcept;
     
-    void setTrackingSource (int source) noexcept { trackingSource = source; }
-    int getTrackingSource() const noexcept { return trackingSource; }
+    void setTrackingSource (int source) noexcept;
+    int getTrackingSource() const noexcept;
     
-    void setTrackingHarmonic (int harmonic) noexcept { trackingHarmonic = harmonic; }
-    int getTrackingHarmonic() const noexcept { return trackingHarmonic; }
+    void setTrackingHarmonic (int harmonic) noexcept;
+    int getTrackingHarmonic() const noexcept;
     
-    void setLookaheadMs (double ms) noexcept { lookaheadMs = ms; }
-    double getLookaheadMs() const noexcept { return lookaheadMs; }
+    void setLookaheadMs (double ms) noexcept;
+    double getLookaheadMs() const noexcept;
+
+    void setDynamicsEnabled (bool dynamicsShouldBeEnabled) noexcept;
+    bool isDynamicsEnabled() const noexcept;
+
+    DynamicVisualizationData getDynamicVisualizationData() const noexcept;
 
 private:
     bool shouldUseTpt() const noexcept;
@@ -187,7 +193,7 @@ private:
     std::atomic<bool> useTpt { false };
     std::atomic<bool> isModulated { false };
 
-    // Dynamic EQ configuration stubs
+    // Dynamic EQ configuration
     std::atomic<int> dynamicMode { 0 };
     std::atomic<double> dynamicRangeDb { 0.0 };
     std::atomic<double> thresholdDb { -24.0 };
@@ -202,6 +208,7 @@ private:
     std::atomic<int> trackingSource { 0 };
     std::atomic<int> trackingHarmonic { 0 };
     std::atomic<double> lookaheadMs { 0.0 };
+    std::atomic<bool> dynamicsEnabled { false };
 
     // Smoothing
     using FrequencySmoother = juce::SmoothedValue<double, juce::ValueSmoothingTypes::Multiplicative>;
@@ -236,6 +243,11 @@ private:
 
     // Continuously modulated TPT SVG path
     TPTFilter tptFilter;
+
+    // Dynamic Processor instance and last output tracking
+    DynamicProcessor dynamicProcessor;
+    float lastOutputL = 0.0f;
+    float lastOutputR = 0.0f;
 };
 
 inline constexpr int kNumParametricBands = 12;
@@ -248,8 +260,8 @@ public:
     void prepare (double sampleRate, int maxBlockSize) noexcept;
     void reset() noexcept;
 
-    void process (float* const* channels, int numChannels, int numSamples, bool isMidSide, BandStage stage) noexcept;
-    void process (juce::AudioBuffer<float>& buffer, bool isMidSide, BandStage stage) noexcept;
+    void process (float* const* channels, int numChannels, int numSamples, bool isMidSide, BandStage stage, const float* const* sidechainChannels = nullptr, int numSidechainChannels = 0) noexcept;
+    void process (juce::AudioBuffer<float>& buffer, bool isMidSide, BandStage stage, const float* const* sidechainChannels = nullptr, int numSidechainChannels = 0) noexcept;
 
     ParametricBand& operator[] (std::size_t index) noexcept { return bands[index]; }
     const ParametricBand& operator[] (std::size_t index) const noexcept { return bands[index]; }

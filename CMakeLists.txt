@@ -46,6 +46,8 @@ target_sources(ShredEQ
         Source/PluginEditor.cpp
         Source/DSP/BiquadCoefficients.cpp
         Source/DSP/TPTFilter.cpp
+        Source/DSP/EnvelopeFollower.cpp
+        Source/DSP/DynamicProcessor.cpp
         Source/DSP/ParametricBand.cpp
         Source/DSP/ResponseComputer.cpp
 )
@@ -74,10 +76,13 @@ add_executable(ShredEQUnitTests
     tests/TestMain.cpp
     tests/BiquadTests.cpp
     tests/ParametricBandTests.cpp
+    tests/DynamicEQTests.cpp
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
     Source/DSP/BiquadCoefficients.cpp
     Source/DSP/TPTFilter.cpp
+    Source/DSP/EnvelopeFollower.cpp
+    Source/DSP/DynamicProcessor.cpp
     Source/DSP/ParametricBand.cpp
     Source/DSP/ResponseComputer.cpp
 )

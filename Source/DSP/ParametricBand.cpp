@@ -10,10 +10,23 @@ ParametricBand::ParametricBand() noexcept
     smoothedFrequency.setCurrentAndTargetValue (targetFrequency);
     smoothedGain.setCurrentAndTargetValue (targetGainDb);
     smoothedQ.setCurrentAndTargetValue (targetQ);
+
+    // Sync dynamic processor defaults
+    dynamicProcessor.setMode (static_cast<DynamicMode> (dynamicMode.load()));
+    dynamicProcessor.setRangeDb (dynamicRangeDb.load());
+    dynamicProcessor.setThresholdDb (thresholdDb.load());
+    dynamicProcessor.setRatio (ratio.load());
+    dynamicProcessor.setAttackMs (attackMs.load());
+    dynamicProcessor.setReleaseMs (releaseMs.load());
+    dynamicProcessor.setKneeDb (kneeDb.load());
+    dynamicProcessor.setDetectorSource (static_cast<DetectorSource> (detectorSource.load()));
+    dynamicProcessor.setDetectorFrequency (detectorFrequency.load());
+    dynamicProcessor.setDetectorQ (detectorQ.load());
 }
 
 void ParametricBand::prepare (double sampleRate, int maxBlockSize) noexcept
 {
+    juce::ignoreUnused (maxBlockSize);
     currentSampleRate = sampleRate > 0.0 ? sampleRate : 44100.0;
 
     smoothedFrequency.reset (currentSampleRate, 0.02);
@@ -21,6 +34,7 @@ void ParametricBand::prepare (double sampleRate, int maxBlockSize) noexcept
     smoothedQ.reset (currentSampleRate, 0.02);
 
     tptFilter.prepare (currentSampleRate);
+    dynamicProcessor.prepare (currentSampleRate);
 
     reset();
 }
@@ -29,6 +43,10 @@ void ParametricBand::reset() noexcept
 {
     biquadStates = {};
     tptFilter.reset();
+    dynamicProcessor.reset();
+
+    lastOutputL = 0.0f;
+    lastOutputR = 0.0f;
 
     smoothedFrequency.setCurrentAndTargetValue (targetFrequency);
     smoothedGain.setCurrentAndTargetValue (targetGainDb);
@@ -41,12 +59,12 @@ void ParametricBand::reset() noexcept
     updateActiveCoefficients (targetFrequency, targetGainDb, targetQ);
 }
 
-void ParametricBand::process (juce::AudioBuffer<float>& buffer, bool isMidSide) noexcept
+void ParametricBand::process (juce::AudioBuffer<float>& buffer, bool isMidSide, const float* const* sidechainChannels, int numSidechainChannels) noexcept
 {
-    process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples(), isMidSide);
+    process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples(), isMidSide, sidechainChannels, numSidechainChannels);
 }
 
-void ParametricBand::process (float* const* channels, int numChannels, int numSamples, bool isMidSide) noexcept
+void ParametricBand::process (float* const* channels, int numChannels, int numSamples, bool isMidSide, const float* const* sidechainChannels, int numSidechainChannels) noexcept
 {
     if (!enabled.load())
         return;
@@ -90,76 +108,183 @@ void ParametricBand::process (float* const* channels, int numChannels, int numSa
     }
 
     const bool smoothing = smoothedFrequency.isSmoothing() || smoothedGain.isSmoothing() || smoothedQ.isSmoothing();
+    const bool isDynActive = dynamicsEnabled.load() && (dynamicMode.load() != static_cast<int> (DynamicMode::staticEq));
 
-    if (paramsChanged && !smoothing)
+    if (isDynActive)
     {
-        updateActiveCoefficients (smoothedFrequency.getCurrentValue(),
-                                  smoothedGain.getCurrentValue(),
-                                  smoothedQ.getCurrentValue());
+        for (int sampleIndex = 0; sampleIndex < numSamples; ++sampleIndex)
+        {
+            const double f = smoothing ? smoothedFrequency.getNextValue() : smoothedFrequency.getCurrentValue();
+            const double g = smoothing ? smoothedGain.getNextValue() : smoothedGain.getCurrentValue();
+            const double q = smoothing ? smoothedQ.getNextValue() : smoothedQ.getCurrentValue();
+
+            const float inputL = filterL ? channels[0][sampleIndex] : 0.0f;
+            const float inputR = filterR ? channels[1][sampleIndex] : 0.0f;
+
+            float inputMono = 0.0f;
+            if (filterL && filterR)
+                inputMono = isMidSide ? inputL : 0.5f * (inputL + inputR);
+            else if (filterL)
+                inputMono = inputL;
+            else if (filterR)
+                inputMono = inputR;
+
+            float outputMono = 0.0f;
+            if (filterL && filterR)
+                outputMono = isMidSide ? lastOutputL : 0.5f * (lastOutputL + lastOutputR);
+            else if (filterL)
+                outputMono = lastOutputL;
+            else if (filterR)
+                outputMono = lastOutputR;
+
+            float extSC = 0.0f;
+            if (sidechainChannels != nullptr && numSidechainChannels > 0)
+            {
+                if (numSidechainChannels == 1)
+                    extSC = sidechainChannels[0][sampleIndex];
+                else
+                    extSC = 0.5f * (sidechainChannels[0][sampleIndex] + sidechainChannels[1][sampleIndex]);
+            }
+
+            DetectorContext context;
+            context.left = isMidSide ? (inputL + inputR) / 1.41421356237f : inputL;
+            context.right = isMidSide ? (inputL - inputR) / 1.41421356237f : inputR;
+            context.mid = isMidSide ? inputL : (inputL + inputR) / 1.41421356237f;
+            context.side = isMidSide ? inputR : (inputL - inputR) / 1.41421356237f;
+            context.externalSidechain = extSC;
+            context.input = inputMono;
+            context.output = outputMono;
+
+            const float primarySample = inputMono;
+            const float multiplier = dynamicProcessor.processSample (primarySample, context, static_cast<float> (g));
+
+            const double modulatedGainDb = g * multiplier;
+            updateActiveCoefficients (f, modulatedGainDb, q);
+
+            if (tpt)
+            {
+                if (filterL)
+                    channels[0][sampleIndex] = tptFilter.processSample (channels[0][sampleIndex], 0);
+                if (filterR)
+                    channels[1][sampleIndex] = tptFilter.processSample (channels[1][sampleIndex], 1);
+            }
+            else
+            {
+                const auto activeSections = currentCascade.size();
+                
+                if (filterL)
+                {
+                    double sample = static_cast<double> (channels[0][sampleIndex]);
+                    for (std::size_t i = 0; i < activeSections; ++i)
+                    {
+                        const auto& coeffs = currentCascade.sections[i];
+                        auto& state = biquadStates[0].sections[i];
+
+                        const double output = coeffs.b0 * sample + state.s1;
+                        state.s1 = coeffs.b1 * sample - coeffs.a1 * output + state.s2;
+                        state.s2 = coeffs.b2 * sample - coeffs.a2 * output;
+
+                        if (std::abs (state.s1) < 1.0e-24) state.s1 = 0.0;
+                        if (std::abs (state.s2) < 1.0e-24) state.s2 = 0.0;
+
+                        sample = output;
+                    }
+                    channels[0][sampleIndex] = static_cast<float> (sample);
+                }
+                if (filterR)
+                {
+                    double sample = static_cast<double> (channels[1][sampleIndex]);
+                    for (std::size_t i = 0; i < activeSections; ++i)
+                    {
+                        const auto& coeffs = currentCascade.sections[i];
+                        auto& state = biquadStates[1].sections[i];
+
+                        const double output = coeffs.b0 * sample + state.s1;
+                        state.s1 = coeffs.b1 * sample - coeffs.a1 * output + state.s2;
+                        state.s2 = coeffs.b2 * sample - coeffs.a2 * output;
+
+                        if (std::abs (state.s1) < 1.0e-24) state.s1 = 0.0;
+                        if (std::abs (state.s2) < 1.0e-24) state.s2 = 0.0;
+
+                        sample = output;
+                    }
+                    channels[1][sampleIndex] = static_cast<float> (sample);
+                }
+            }
+
+            lastOutputL = filterL ? channels[0][sampleIndex] : 0.0f;
+            lastOutputR = filterR ? channels[1][sampleIndex] : 0.0f;
+        }
     }
-
-    for (int sampleIndex = 0; sampleIndex < numSamples; ++sampleIndex)
+    else
     {
-        if (smoothing)
+        // Prior static path
+        if (paramsChanged && !smoothing)
         {
-            const double f = smoothedFrequency.getNextValue();
-            const double g = smoothedGain.getNextValue();
-            const double q = smoothedQ.getNextValue();
-            updateActiveCoefficients (f, g, q);
+            updateActiveCoefficients (smoothedFrequency.getCurrentValue(),
+                                      smoothedGain.getCurrentValue(),
+                                      smoothedQ.getCurrentValue());
         }
 
-        if (tpt)
+        for (int sampleIndex = 0; sampleIndex < numSamples; ++sampleIndex)
         {
-            if (filterL)
+            if (smoothing)
             {
-                channels[0][sampleIndex] = tptFilter.processSample (channels[0][sampleIndex], 0);
+                const double f = smoothedFrequency.getNextValue();
+                const double g = smoothedGain.getNextValue();
+                const double q = smoothedQ.getNextValue();
+                updateActiveCoefficients (f, g, q);
             }
-            if (filterR)
+
+            if (tpt)
             {
-                channels[1][sampleIndex] = tptFilter.processSample (channels[1][sampleIndex], 1);
+                if (filterL)
+                    channels[0][sampleIndex] = tptFilter.processSample (channels[0][sampleIndex], 0);
+                if (filterR)
+                    channels[1][sampleIndex] = tptFilter.processSample (channels[1][sampleIndex], 1);
             }
-        }
-        else
-        {
-            const auto activeSections = currentCascade.size();
-            
-            if (filterL)
+            else
             {
-                double sample = static_cast<double> (channels[0][sampleIndex]);
-                for (std::size_t i = 0; i < activeSections; ++i)
+                const auto activeSections = currentCascade.size();
+                
+                if (filterL)
                 {
-                    const auto& coeffs = currentCascade.sections[i];
-                    auto& state = biquadStates[0].sections[i];
+                    double sample = static_cast<double> (channels[0][sampleIndex]);
+                    for (std::size_t i = 0; i < activeSections; ++i)
+                    {
+                        const auto& coeffs = currentCascade.sections[i];
+                        auto& state = biquadStates[0].sections[i];
 
-                    const double output = coeffs.b0 * sample + state.s1;
-                    state.s1 = coeffs.b1 * sample - coeffs.a1 * output + state.s2;
-                    state.s2 = coeffs.b2 * sample - coeffs.a2 * output;
+                        const double output = coeffs.b0 * sample + state.s1;
+                        state.s1 = coeffs.b1 * sample - coeffs.a1 * output + state.s2;
+                        state.s2 = coeffs.b2 * sample - coeffs.a2 * output;
 
-                    if (std::abs (state.s1) < 1.0e-24) state.s1 = 0.0;
-                    if (std::abs (state.s2) < 1.0e-24) state.s2 = 0.0;
+                        if (std::abs (state.s1) < 1.0e-24) state.s1 = 0.0;
+                        if (std::abs (state.s2) < 1.0e-24) state.s2 = 0.0;
 
-                    sample = output;
+                        sample = output;
+                    }
+                    channels[0][sampleIndex] = static_cast<float> (sample);
                 }
-                channels[0][sampleIndex] = static_cast<float> (sample);
-            }
-            if (filterR)
-            {
-                double sample = static_cast<double> (channels[1][sampleIndex]);
-                for (std::size_t i = 0; i < activeSections; ++i)
+                if (filterR)
                 {
-                    const auto& coeffs = currentCascade.sections[i];
-                    auto& state = biquadStates[1].sections[i];
+                    double sample = static_cast<double> (channels[1][sampleIndex]);
+                    for (std::size_t i = 0; i < activeSections; ++i)
+                    {
+                        const auto& coeffs = currentCascade.sections[i];
+                        auto& state = biquadStates[1].sections[i];
 
-                    const double output = coeffs.b0 * sample + state.s1;
-                    state.s1 = coeffs.b1 * sample - coeffs.a1 * output + state.s2;
-                    state.s2 = coeffs.b2 * sample - coeffs.a2 * output;
+                        const double output = coeffs.b0 * sample + state.s1;
+                        state.s1 = coeffs.b1 * sample - coeffs.a1 * output + state.s2;
+                        state.s2 = coeffs.b2 * sample - coeffs.a2 * output;
 
-                    if (std::abs (state.s1) < 1.0e-24) state.s1 = 0.0;
-                    if (std::abs (state.s2) < 1.0e-24) state.s2 = 0.0;
+                        if (std::abs (state.s1) < 1.0e-24) state.s1 = 0.0;
+                        if (std::abs (state.s2) < 1.0e-24) state.s2 = 0.0;
 
-                    sample = output;
+                        sample = output;
+                    }
+                    channels[1][sampleIndex] = static_cast<float> (sample);
                 }
-                channels[1][sampleIndex] = static_cast<float> (sample);
             }
         }
     }
@@ -270,6 +395,8 @@ bool ParametricBand::shouldFilterChannel (int channelIndex, bool isMidSideDomain
 
 void ParametricBand::updateActiveCoefficients (double f, double g, double q) noexcept
 {
+    dynamicProcessor.setStaticGainDb (g);
+
     if (shouldUseTpt())
     {
         tptFilter.setParameters (f, g, q, toFilterKind (filterType.load()));
@@ -286,6 +413,184 @@ void ParametricBand::updateActiveCoefficients (double f, double g, double q) noe
     }
 }
 
+// Dynamic EQ setters and getters
+
+void ParametricBand::setDynamicMode (int mode) noexcept
+{
+    dynamicMode = mode;
+    dynamicProcessor.setMode (static_cast<DynamicMode> (mode));
+}
+
+int ParametricBand::getDynamicMode() const noexcept
+{
+    return dynamicMode.load();
+}
+
+void ParametricBand::setDynamicRangeDb (double range) noexcept
+{
+    dynamicRangeDb = range;
+    dynamicProcessor.setRangeDb (range);
+}
+
+double ParametricBand::getDynamicRangeDb() const noexcept
+{
+    return dynamicRangeDb.load();
+}
+
+void ParametricBand::setThresholdDb (double thresh) noexcept
+{
+    thresholdDb = thresh;
+    dynamicProcessor.setThresholdDb (thresh);
+}
+
+double ParametricBand::getThresholdDb() const noexcept
+{
+    return thresholdDb.load();
+}
+
+void ParametricBand::setRatio (double r) noexcept
+{
+    ratio = r;
+    dynamicProcessor.setRatio (r);
+}
+
+double ParametricBand::getRatio() const noexcept
+{
+    return ratio.load();
+}
+
+void ParametricBand::setAttackMs (double a) noexcept
+{
+    attackMs = a;
+    dynamicProcessor.setAttackMs (a);
+}
+
+double ParametricBand::getAttackMs() const noexcept
+{
+    return attackMs.load();
+}
+
+void ParametricBand::setHoldMs (double h) noexcept
+{
+    holdMs = h;
+}
+
+double ParametricBand::getHoldMs() const noexcept
+{
+    return holdMs.load();
+}
+
+void ParametricBand::setReleaseMs (double r) noexcept
+{
+    releaseMs = r;
+    dynamicProcessor.setReleaseMs (r);
+}
+
+double ParametricBand::getReleaseMs() const noexcept
+{
+    return releaseMs.load();
+}
+
+void ParametricBand::setKneeDb (double k) noexcept
+{
+    kneeDb = k;
+    dynamicProcessor.setKneeDb (k);
+}
+
+double ParametricBand::getKneeDb() const noexcept
+{
+    return kneeDb.load();
+}
+
+void ParametricBand::setDetectorSource (int source) noexcept
+{
+    detectorSource = source;
+    dynamicProcessor.setDetectorSource (static_cast<DetectorSource> (source));
+}
+
+int ParametricBand::getDetectorSource() const noexcept
+{
+    return detectorSource.load();
+}
+
+void ParametricBand::setDetectorFrequency (double freq) noexcept
+{
+    detectorFrequency = freq;
+    dynamicProcessor.setDetectorFrequency (freq);
+}
+
+double ParametricBand::getDetectorFrequency() const noexcept
+{
+    return detectorFrequency.load();
+}
+
+void ParametricBand::setDetectorQ (double qVal) noexcept
+{
+    detectorQ = qVal;
+    dynamicProcessor.setDetectorQ (qVal);
+}
+
+double ParametricBand::getDetectorQ() const noexcept
+{
+    return detectorQ.load();
+}
+
+void ParametricBand::setTrackingSource (int source) noexcept
+{
+    trackingSource = source;
+}
+
+int ParametricBand::getTrackingSource() const noexcept
+{
+    return trackingSource.load();
+}
+
+void ParametricBand::setTrackingHarmonic (int harmonic) noexcept
+{
+    trackingHarmonic = harmonic;
+}
+
+int ParametricBand::getTrackingHarmonic() const noexcept
+{
+    return trackingHarmonic.load();
+}
+
+void ParametricBand::setLookaheadMs (double ms) noexcept
+{
+    lookaheadMs = ms;
+}
+
+double ParametricBand::getLookaheadMs() const noexcept
+{
+    return lookaheadMs.load();
+}
+
+void ParametricBand::setDynamicsEnabled (bool dynamicsShouldBeEnabled) noexcept
+{
+    dynamicsEnabled = dynamicsShouldBeEnabled;
+}
+
+bool ParametricBand::isDynamicsEnabled() const noexcept
+{
+    return dynamicsEnabled.load();
+}
+
+DynamicVisualizationData ParametricBand::getDynamicVisualizationData() const noexcept
+{
+    auto data = dynamicProcessor.getVisualizationData();
+    if (!dynamicsEnabled.load() || dynamicMode.load() == static_cast<int> (DynamicMode::staticEq))
+    {
+        double g = smoothedGain.getCurrentValue();
+        data.staticGainDb = static_cast<float> (g);
+        data.currentGainDb = static_cast<float> (g);
+        data.maxDynamicRangeDb = static_cast<float> (dynamicRangeDb.load());
+        data.thresholdDb = static_cast<float> (thresholdDb.load());
+        data.detectorLevelDb = -120.0f;
+        data.reactionFlags = 0;
+    }
+    return data;
+}
+
 // ParametricEQ Container Implementation
 
 void ParametricEQ::prepare (double sampleRate, int maxBlockSize) noexcept
@@ -300,18 +605,18 @@ void ParametricEQ::reset() noexcept
         band.reset();
 }
 
-void ParametricEQ::process (juce::AudioBuffer<float>& buffer, bool isMidSide, BandStage stage) noexcept
+void ParametricEQ::process (juce::AudioBuffer<float>& buffer, bool isMidSide, BandStage stage, const float* const* sidechainChannels, int numSidechainChannels) noexcept
 {
-    process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples(), isMidSide, stage);
+    process (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), buffer.getNumSamples(), isMidSide, stage, sidechainChannels, numSidechainChannels);
 }
 
-void ParametricEQ::process (float* const* channels, int numChannels, int numSamples, bool isMidSide, BandStage stage) noexcept
+void ParametricEQ::process (float* const* channels, int numChannels, int numSamples, bool isMidSide, BandStage stage, const float* const* sidechainChannels, int numSidechainChannels) noexcept
 {
     for (auto& band : bands)
     {
         if (band.isEnabled() && band.getStage() == stage)
         {
-            band.process (channels, numChannels, numSamples, isMidSide);
+            band.process (channels, numChannels, numSamples, isMidSide, sidechainChannels, numSidechainChannels);
         }
     }
 }

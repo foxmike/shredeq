@@ -44,6 +44,10 @@ target_sources(ShredEQ
     PRIVATE
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp
+        Source/DSP/BiquadCoefficients.cpp
+        Source/DSP/TPTFilter.cpp
+        Source/DSP/ParametricBand.cpp
+        Source/DSP/ResponseComputer.cpp
 )
 
 target_compile_definitions(ShredEQ PRIVATE
@@ -70,6 +74,10 @@ add_executable(ShredEQUnitTests
     tests/TestMain.cpp
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
+    Source/DSP/BiquadCoefficients.cpp
+    Source/DSP/TPTFilter.cpp
+    Source/DSP/ParametricBand.cpp
+    Source/DSP/ResponseComputer.cpp
 )
 
 target_compile_definitions(ShredEQUnitTests PRIVATE

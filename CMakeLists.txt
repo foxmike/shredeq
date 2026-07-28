@@ -44,6 +44,12 @@ target_sources(ShredEQ
     PRIVATE
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp
+        Source/UI/ShredEQLookAndFeel.cpp
+        Source/UI/EQWorkspace.cpp
+        Source/UI/BandNode.cpp
+        Source/UI/InspectorPanel.cpp
+        Source/UI/IntelligenceDrawer.cpp
+        Source/UI/PercentileCloud.cpp
         Source/DSP/BiquadCoefficients.cpp
         Source/DSP/TPTFilter.cpp
         Source/DSP/EnvelopeFollower.cpp
@@ -122,6 +128,12 @@ add_executable(ShredEQUnitTests
     ${LOOKAHEAD_TEST_SRC}
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
+    Source/UI/ShredEQLookAndFeel.cpp
+    Source/UI/EQWorkspace.cpp
+    Source/UI/BandNode.cpp
+    Source/UI/InspectorPanel.cpp
+    Source/UI/IntelligenceDrawer.cpp
+    Source/UI/PercentileCloud.cpp
     Source/DSP/BiquadCoefficients.cpp
     Source/DSP/TPTFilter.cpp
     Source/DSP/EnvelopeFollower.cpp

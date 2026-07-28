@@ -13,7 +13,7 @@
     "Slider, ComboBox, TextButton/ToggleButton, and popup menu drawing overrides are present",
     "No file outside the task's allowed_write_paths is created or modified"
   ],
-  "selected_backend": "antigravity_cli",
+  "selected_backend": "codex_cli",
   "verification_profile": "focused",
   "allowed_write_paths": [
     "Source/UI/ShredEQLookAndFeel.h",

@@ -14,7 +14,7 @@
     "EQWorkspace maps drag/wheel interactions to frequency, gain, and Q with fine-adjust modifier support and selection callbacks",
     "No file outside the task's allowed_write_paths is created or modified"
   ],
-  "selected_backend": "antigravity_cli",
+  "selected_backend": "codex_cli",
   "verification_profile": "focused",
   "allowed_write_paths": [
     "Source/UI/EQWorkspace.h",

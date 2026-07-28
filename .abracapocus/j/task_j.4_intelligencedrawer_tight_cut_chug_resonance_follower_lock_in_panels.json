@@ -13,7 +13,7 @@
     "Controls attach to APVTS parameters via ParameterIDs rather than inventing a parallel parameter store",
     "No file outside the task's allowed_write_paths is created or modified"
   ],
-  "selected_backend": "antigravity_cli",
+  "selected_backend": "codex_cli",
   "verification_profile": "focused",
   "allowed_write_paths": [
     "Source/UI/IntelligenceDrawer.h",

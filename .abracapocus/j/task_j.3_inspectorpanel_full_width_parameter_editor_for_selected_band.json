@@ -13,7 +13,7 @@
     "Numerical entry is supported via editable labels or equivalent double-click value entry for primary continuous params",
     "No file outside the task's allowed_write_paths is created or modified"
   ],
-  "selected_backend": "antigravity_cli",
+  "selected_backend": "codex_cli",
   "verification_profile": "focused",
   "allowed_write_paths": [
     "Source/UI/InspectorPanel.h",

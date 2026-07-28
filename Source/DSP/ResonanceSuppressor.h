@@ -39,7 +39,14 @@ public:
     void setReleaseMs (double release) noexcept { releaseMs = release; }
     [[nodiscard]] double getReleaseMs() const noexcept { return releaseMs; }
 
-    void setPersistenceRequirement (double persistence) noexcept { persistenceRequirement = persistence; }
+    void setPersistenceRequirement (double persistence) noexcept
+    {
+        persistenceRequirement = std::clamp (persistence, 0.0, 100.0);
+        const auto frameCarry =
+            std::clamp (persistenceRequirement / 100.0, 0.0, 0.9999);
+        persistenceSampleCarry =
+            frameCarry > 0.0 ? std::pow (frameCarry, 1.0 / 512.0) : 0.0;
+    }
     [[nodiscard]] double getPersistenceRequirement() const noexcept { return persistenceRequirement; }
 
     void setIsStatic (bool staticMode) noexcept { isStaticMode = staticMode; }
@@ -101,6 +108,7 @@ private:
     double attackMs = 10.0;
     double releaseMs = 200.0;
     double persistenceRequirement = 50.0;
+    double persistenceSampleCarry = std::pow (0.5, 1.0 / 512.0);
     bool isStaticMode = false;
     StereoRoutingMode placement = StereoRoutingMode::linked;
     float confidence = 0.0f;
@@ -111,6 +119,7 @@ private:
     // Dynamic state
     double targetDynamicDepth = 0.0;
     double candidateTargetDepth = 0.0;
+    double persistentDepthDb = 0.0;
     double currentDepthDb = 0.0;
     double detectorEnvelope = 0.0;
 

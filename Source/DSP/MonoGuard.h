@@ -114,6 +114,8 @@ private:
     std::array<std::atomic<bool>, numBands> bandAtRisk {};
 
     void updateSmoothingCoeff() noexcept;
+    void updateTargetGains (
+        std::array<float, numBands>& targetGain) noexcept;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MonoGuard)
 };

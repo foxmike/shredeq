@@ -657,27 +657,50 @@ void ShredEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     const auto numSidechainChannels = sidechainEnabled ? sidechainBuffer.getNumChannels() : 0;
     const auto lockInEnabled =
         getBoolParam (ShredEQ::ParameterIDs::Sidechain::lockInEnabled);
+    const auto sidechainSource =
+        getChoiceParam (ShredEQ::ParameterIDs::Sidechain::source);
     const auto carveMaximum =
         getParamValue (ShredEQ::ParameterIDs::Sidechain::carveMaxGain);
     const auto carveThreshold =
         getParamValue (ShredEQ::ParameterIDs::Sidechain::carveThreshold);
-    const auto carveScale =
-        48.0f * getParamValue (ShredEQ::ParameterIDs::Sidechain::lockInAmount)
-        / 100.0f;
+    constexpr auto carveScale = 48.0f;
+    const auto lockInAmount =
+        getParamValue (ShredEQ::ParameterIDs::Sidechain::lockInAmount);
 
     sidechainAnalyzer.setEnabled (lockInEnabled);
+    sidechainAnalyzer.setInternalKeyHighPassHz (
+        getParamValue (ShredEQ::ParameterIDs::MidSide::sideHighPass));
     sidechainAnalyzer.setCarveParameters (
         carveMaximum, carveScale, carveThreshold);
     maskingCarver.setEnabled (lockInEnabled);
     maskingCarver.setMode (ShredEQ::DSP::MaskingCarverMode::automatic);
     maskingCarver.setCarveParameters (
         carveMaximum, carveScale, carveThreshold);
+    maskingCarver.setMixAmount (lockInAmount);
 
-    if (lockInEnabled && sidechainEnabled)
+    const auto carveKeyAvailable =
+        sidechainSource == 0 ? sidechainEnabled : numChannels > 0;
+
+    if (lockInEnabled && carveKeyAvailable)
     {
-        sidechainAnalyzer.process (
-            mainBuffer.getArrayOfReadPointers(), numChannels,
-            sidechainChannels, numSidechainChannels, numSamples);
+        if (sidechainSource == 0)
+        {
+            sidechainAnalyzer.process (
+                mainBuffer.getArrayOfReadPointers(), numChannels,
+                sidechainChannels, numSidechainChannels, numSamples);
+        }
+        else
+        {
+            const auto internalKey =
+                sidechainSource == 2
+                    ? ShredEQ::DSP::SidechainAnalyzer::InternalKey::mid
+                    : sidechainSource == 3
+                        ? ShredEQ::DSP::SidechainAnalyzer::InternalKey::side
+                        : ShredEQ::DSP::SidechainAnalyzer::InternalKey::main;
+            sidechainAnalyzer.processInternal (
+                mainBuffer.getArrayOfReadPointers(), numChannels,
+                numSamples, internalKey);
+        }
         maskingCarver.importAnalyzerMetrics (sidechainAnalyzer);
 
         const auto suggestionCount = std::min (
@@ -779,7 +802,7 @@ void ShredEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     if (multibandEnabled)
         multibandEngine.process (mainBuffer, sidechainBufferPtr);
 
-    if (lockInEnabled && sidechainEnabled)
+    if (lockInEnabled && carveKeyAvailable)
         maskingCarver.process (channels, numChannels, numSamples);
 
     processParametricStage (ShredEQ::DSP::BandStage::stageB);

@@ -69,6 +69,7 @@ public:
     /** G = -min(maximumDepthDb, scaleDb * max(0, masking-threshold)). */
     void setCarveParameters (float maximumDepthDb, float scaleDb,
                              float maskingThreshold) noexcept;
+    void setMixAmount (float amountPercent) noexcept;
     void setAttackReleaseMs (float attackMs, float releaseMs) noexcept;
 
     void configureBand (std::size_t carverBand, std::size_t analyzerBand,
@@ -143,6 +144,7 @@ private:
     std::atomic<float> maximumDepthDb { 6.0f };
     std::atomic<float> scaleDb { 12.0f };
     std::atomic<float> maskingThreshold { 0.2f };
+    std::atomic<float> mixAmount { 1.0f };
     std::atomic<float> attackTimeMs { 15.0f };
     std::atomic<float> releaseTimeMs { 180.0f };
 

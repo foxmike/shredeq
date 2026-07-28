@@ -62,6 +62,8 @@ void MaskingCarver::process (
     const auto activePlacement = placement.load (std::memory_order_relaxed);
     const auto attackMs = attackTimeMs.load (std::memory_order_relaxed);
     const auto releaseMs = releaseTimeMs.load (std::memory_order_relaxed);
+    const auto wetMix =
+        std::clamp (mixAmount.load (std::memory_order_relaxed), 0.0f, 1.0f);
 
     for (auto& band : bands)
     {
@@ -96,11 +98,19 @@ void MaskingCarver::process (
             if (activePlacement == MaskingCarverPlacement::stereo
                 || channelCount == 1)
             {
-                channels[0][sample] = static_cast<float> (processFilter (
-                    channels[0][sample], coefficients, band.states[0]));
+                const auto dryLeft = channels[0][sample];
+                const auto wetLeft = static_cast<float> (processFilter (
+                    dryLeft, coefficients, band.states[0]));
+                channels[0][sample] =
+                    dryLeft + wetMix * (wetLeft - dryLeft);
                 if (channelCount > 1 && channels[1] != nullptr)
-                    channels[1][sample] = static_cast<float> (processFilter (
-                        channels[1][sample], coefficients, band.states[1]));
+                {
+                    const auto dryRight = channels[1][sample];
+                    const auto wetRight = static_cast<float> (processFilter (
+                        dryRight, coefficients, band.states[1]));
+                    channels[1][sample] =
+                        dryRight + wetMix * (wetRight - dryRight);
+                }
                 continue;
             }
 
@@ -111,9 +121,17 @@ void MaskingCarver::process (
             auto mid = 0.5 * (left + right);
             auto side = 0.5 * (left - right);
             if (activePlacement == MaskingCarverPlacement::midOnly)
-                mid = processFilter (mid, coefficients, band.states[0]);
+            {
+                const auto wet =
+                    processFilter (mid, coefficients, band.states[0]);
+                mid += wetMix * (wet - mid);
+            }
             else
-                side = processFilter (side, coefficients, band.states[1]);
+            {
+                const auto wet =
+                    processFilter (side, coefficients, band.states[1]);
+                side += wetMix * (wet - side);
+            }
             channels[0][sample] = static_cast<float> (mid + side);
             channels[1][sample] = static_cast<float> (mid - side);
         }
@@ -181,6 +199,15 @@ void MaskingCarver::setAttackReleaseMs (
         std::memory_order_relaxed);
     releaseTimeMs.store (
         std::clamp (finiteOr (releaseMs, 180.0f), 0.1f, 5000.0f),
+        std::memory_order_relaxed);
+}
+
+void MaskingCarver::setMixAmount (float amountPercent) noexcept
+{
+    mixAmount.store (
+        std::clamp (
+            finiteOr (amountPercent, 100.0f) / 100.0f,
+            0.0f, 1.0f),
         std::memory_order_relaxed);
 }
 

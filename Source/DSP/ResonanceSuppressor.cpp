@@ -36,6 +36,7 @@ void SuppressorSlot::reset() noexcept
     currentDepthDb = 0.0;
     targetDynamicDepth = 0.0;
     candidateTargetDepth = 0.0;
+    persistentDepthDb = 0.0;
     detectorEnvelope = 0.0;
     detectorStates[0].reset();
     detectorStates[1].reset();
@@ -98,10 +99,14 @@ void SuppressorSlot::updateDepthTarget (const ResonanceDetector& detector) noexc
         }
     }
 
-    if (foundMatch && (bestPersistence * 100.0 >= persistenceRequirement))
+    if (foundMatch)
     {
+        // Candidate persistence is evidence strength.  The slot Persistence
+        // control itself is applied below as temporal carry-over of gain
+        // reduction, rather than being misused as an on/off threshold.
         candidateTargetDepth = std::clamp (
-            static_cast<double> (bestExcess), 0.0, targetMaxDepth);
+            static_cast<double> (bestExcess * bestPersistence),
+            0.0, targetMaxDepth);
     }
     else
     {
@@ -172,8 +177,11 @@ void SuppressorSlot::processSample (double& left, double& right, double sampleRa
             detectorCoefficients.a2);
         const auto magnitude =
             0.5 * (std::abs (detectorLeft) + std::abs (detectorRight));
+        // Detector ballistics are intentionally independent of the audible
+        // gain-reduction envelope.  releaseMs belongs to currentDepthDb in
+        // updateEnvelope(), where it directly controls notch recovery.
         const auto envelopeTimeMs =
-            magnitude > detectorEnvelope ? attackMs : releaseMs;
+            magnitude > detectorEnvelope ? 2.0 : 30.0;
         const auto coefficient = 1.0 - std::exp (
             -1.0 / (std::max (0.1, envelopeTimeMs)
                     * 0.001 * std::max (sampleRate, 1.0)));
@@ -182,14 +190,21 @@ void SuppressorSlot::processSample (double& left, double& right, double sampleRa
         const auto levelDb =
             20.0 * std::log10 (detectorEnvelope + 1.0e-12);
         const auto activity = std::clamp ((levelDb + 72.0) / 60.0, 0.0, 1.0);
-        const auto requiredActivity = std::clamp (
-            persistenceRequirement / 100.0, 0.0, 1.0) * 0.9;
-        const auto persistentActivity = std::clamp (
-            (activity - requiredActivity)
-                / std::max (0.1, 1.0 - requiredActivity),
-            0.0, 1.0);
-        targetDynamicDepth = std::max (
-            candidateTargetDepth, targetMaxDepth * persistentActivity);
+        const auto detectedDepth = std::max (
+            candidateTargetDepth, targetMaxDepth * activity);
+
+        // Persistence is the fraction of the previous analysis-frame depth
+        // retained when fresh evidence falls.  Convert that frame-domain
+        // coefficient to a per-sample coefficient (512 is the analyzer hop)
+        // so behaviour is independent of host block size.
+        if (detectedDepth >= persistentDepthDb)
+            persistentDepthDb = detectedDepth;
+        else
+            persistentDepthDb = std::max (
+                detectedDepth,
+                persistentDepthDb * persistenceSampleCarry);
+
+        targetDynamicDepth = persistentDepthDb;
     }
 
     if (currentDepthDb < 0.001)

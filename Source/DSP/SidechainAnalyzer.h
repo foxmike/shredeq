@@ -26,6 +26,13 @@ public:
     using BandValues = std::array<float, numBands>;
     using DominantFlags = std::array<bool, numBands>;
 
+    enum class InternalKey
+    {
+        main = 0,
+        mid,
+        side
+    };
+
     struct CollisionFrame
     {
         BandValues masking {};
@@ -47,12 +54,18 @@ public:
                   const float* const* sidechainChannels,
                   int numSidechainChannels, int numSamples) noexcept;
 
+    /** Uses a main-input-derived key when no external sidechain is desired. */
+    void processInternal (const float* const* mainChannels,
+                          int numMainChannels, int numSamples,
+                          InternalKey key) noexcept;
+
     void setEnabled (bool shouldBeEnabled) noexcept;
     [[nodiscard]] bool isEnabled() const noexcept;
 
     /** Sidechain gate transition in dBFS RMS (default -72 dBFS). */
     void setActivityThresholdDb (float thresholdDb) noexcept;
     [[nodiscard]] float getActivityThresholdDb() const noexcept;
+    void setInternalKeyHighPassHz (float frequencyHz) noexcept;
 
     /** Parameters used by the analyzer's requested G_carve snapshot. */
     void setCarveParameters (float maximumDepthDb, float scaleDb,
@@ -89,6 +102,10 @@ private:
     [[nodiscard]] static double processFilter (
         double input, const BiquadCoefficients& coefficients,
         FilterState& state) noexcept;
+    void processDerived (
+        const float* const* mainChannels, int numMainChannels,
+        const float* const* sidechainChannels, int numSidechainChannels,
+        int numSamples, const InternalKey* internalKey) noexcept;
     void publishZeroFrame() noexcept;
     void publishFrame (const BandValues& overlap,
                        const BandValues& dominance,
@@ -110,6 +127,9 @@ private:
     std::array<FilterState, numBands> sidechainFilterStates {};
     BandValues smoothedMainPower {};
     BandValues smoothedSidechainPower {};
+    std::atomic<float> internalKeyHighPassHz { 120.0f };
+    double keyHighPassPreviousInput = 0.0;
+    double keyHighPassPreviousOutput = 0.0;
 
     std::array<std::atomic<float>, numBands> publishedOverlap {};
     std::array<std::atomic<float>, numBands> publishedDominance {};

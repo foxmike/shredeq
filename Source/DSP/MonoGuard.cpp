@@ -118,6 +118,52 @@ uint32_t MonoGuard::getRiskMask() const noexcept
     return mask;
 }
 
+void MonoGuard::updateTargetGains (
+    std::array<float, numBands>& targetGain) noexcept
+{
+    targetGain.fill (1.0f);
+    const bool protect = protectionEnabled.load();
+    const float amount =
+        std::clamp (protectionAmount.load() / 100.0f, 0.0f, 1.0f);
+    const float sideToMidLimit = 1.0f + 10.0f * (1.0f - amount);
+
+    for (int band = 0; band < numBands; ++band)
+    {
+        const auto index = static_cast<std::size_t> (band);
+        const double denominator =
+            std::sqrt (std::max (0.0, P_LL[index] * P_RR[index]))
+            + static_cast<double> (eps);
+        const float rho = std::clamp (
+            static_cast<float> (P_LR[index] / denominator), -1.0f, 1.0f);
+        smoothedRho[index].store (rho);
+
+        const float midPower = std::max (
+            0.0f, static_cast<float> (
+                0.5 * (P_LL[index] + P_RR[index] + 2.0 * P_LR[index])));
+        const float sidePower = std::max (
+            0.0f, static_cast<float> (
+                0.5 * (P_LL[index] + P_RR[index] - 2.0 * P_LR[index])));
+        const float sideToMid = sidePower / (midPower + eps);
+        const float risk =
+            std::clamp ((0.2f - rho) / 1.2f, 0.0f, 1.0f);
+        smoothedRisk[index].store (risk);
+        bandAtRisk[index].store (rho < 0.1f && sidePower > 1.0e-7f);
+
+        if (protect && sideToMid > sideToMidLimit && rho < 0.2f)
+        {
+            const float totalPower =
+                static_cast<float> (P_LL[index] + P_RR[index]);
+            const float gate = std::clamp (
+                (totalPower - 1.0e-8f) / 9.0e-8f, 0.0f, 1.0f);
+            const float limitedGain = std::clamp (
+                std::sqrt (sideToMidLimit / (sideToMid + eps)),
+                0.05f, 1.0f);
+            targetGain[index] =
+                1.0f - (1.0f - limitedGain) * risk * gate;
+        }
+    }
+}
+
 void MonoGuard::process (float* left, float* right, int numSamples) noexcept
 {
     if (! enabled.load())
@@ -127,42 +173,8 @@ void MonoGuard::process (float* left, float* right, int numSamples) noexcept
         return;
 
     const bool protect = protectionEnabled.load();
-    const float protAmt = protectionAmount.load();
-    const float protAmtNormalized = std::clamp (protAmt / 100.0f, 0.0f, 1.0f);
-    const float T_sm = 1.0f + 10.0f * (1.0f - protAmtNormalized);
-
-    // Compute target gains and update atomics once per block from current smoothed state
     std::array<float, numBands> targetGain;
-    targetGain.fill (1.0f);
-
-    for (int b = 0; b < numBands; ++b)
-    {
-        const double denom = std::sqrt (std::max (0.0, P_LL[static_cast<size_t> (b)] * P_RR[static_cast<size_t> (b)])) + static_cast<double> (eps);
-        const float rho = std::clamp (static_cast<float> (P_LR[static_cast<size_t> (b)] / denom), -1.0f, 1.0f);
-
-        smoothedRho[static_cast<size_t> (b)].store (rho);
-
-        float pMM = static_cast<float> (0.5 * (P_LL[static_cast<size_t> (b)] + P_RR[static_cast<size_t> (b)] + 2.0 * P_LR[static_cast<size_t> (b)]));
-        float pSS = static_cast<float> (0.5 * (P_LL[static_cast<size_t> (b)] + P_RR[static_cast<size_t> (b)] - 2.0 * P_LR[static_cast<size_t> (b)]));
-        pMM = std::max (0.0f, pMM);
-        pSS = std::max (0.0f, pSS);
-
-        const float r_sm = pSS / (pMM + eps);
-        const float risk = std::clamp ((0.2f - rho) / 1.2f, 0.0f, 1.0f);
-        smoothedRisk[static_cast<size_t> (b)].store (risk);
-
-        const bool atRisk = (rho < 0.1f) && (pSS > 1e-7f);
-        bandAtRisk[static_cast<size_t> (b)].store (atRisk);
-
-        if (protect && r_sm > T_sm && rho < 0.2f)
-        {
-            const float totalPower = static_cast<float> (P_LL[static_cast<size_t> (b)] + P_RR[static_cast<size_t> (b)]);
-            const float gate = std::clamp ((totalPower - 1e-8f) / 9e-8f, 0.0f, 1.0f);
-
-            const float g_target = std::clamp (std::sqrt (T_sm / (r_sm + eps)), 0.05f, 1.0f);
-            targetGain[static_cast<size_t> (b)] = 1.0f - (1.0f - g_target) * risk * gate;
-        }
-    }
+    updateTargetGains (targetGain);
 
     for (int i = 0; i < numSamples; ++i)
     {
@@ -193,6 +205,11 @@ void MonoGuard::process (float* left, float* right, int numSamples) noexcept
             }
         }
 
+        // Refresh within the current block so a freshly prepared processor
+        // does not pass its entire first block before protection can react.
+        if ((i & 31) == 31)
+            updateTargetGains (targetGain);
+
         if (protect)
         {
             const float mid = (lVal + rVal) * invSqrt2;
@@ -213,42 +230,8 @@ void MonoGuard::processMS (float* mid, float* side, int numSamples) noexcept
         return;
 
     const bool protect = protectionEnabled.load();
-    const float protAmt = protectionAmount.load();
-    const float protAmtNormalized = std::clamp (protAmt / 100.0f, 0.0f, 1.0f);
-    const float T_sm = 1.0f + 10.0f * (1.0f - protAmtNormalized);
-
-    // Compute target gains and update atomics once per block from current smoothed state
     std::array<float, numBands> targetGain;
-    targetGain.fill (1.0f);
-
-    for (int b = 0; b < numBands; ++b)
-    {
-        const double denom = std::sqrt (std::max (0.0, P_LL[static_cast<size_t> (b)] * P_RR[static_cast<size_t> (b)])) + static_cast<double> (eps);
-        const float rho = std::clamp (static_cast<float> (P_LR[static_cast<size_t> (b)] / denom), -1.0f, 1.0f);
-
-        smoothedRho[static_cast<size_t> (b)].store (rho);
-
-        float pMM = static_cast<float> (0.5 * (P_LL[static_cast<size_t> (b)] + P_RR[static_cast<size_t> (b)] + 2.0 * P_LR[static_cast<size_t> (b)]));
-        float pSS = static_cast<float> (0.5 * (P_LL[static_cast<size_t> (b)] + P_RR[static_cast<size_t> (b)] - 2.0 * P_LR[static_cast<size_t> (b)]));
-        pMM = std::max (0.0f, pMM);
-        pSS = std::max (0.0f, pSS);
-
-        const float r_sm = pSS / (pMM + eps);
-        const float risk = std::clamp ((0.2f - rho) / 1.2f, 0.0f, 1.0f);
-        smoothedRisk[static_cast<size_t> (b)].store (risk);
-
-        const bool atRisk = (rho < 0.1f) && (pSS > 1e-7f);
-        bandAtRisk[static_cast<size_t> (b)].store (atRisk);
-
-        if (protect && r_sm > T_sm && rho < 0.2f)
-        {
-            const float totalPower = static_cast<float> (P_LL[static_cast<size_t> (b)] + P_RR[static_cast<size_t> (b)]);
-            const float gate = std::clamp ((totalPower - 1e-8f) / 9e-8f, 0.0f, 1.0f);
-
-            const float g_target = std::clamp (std::sqrt (T_sm / (r_sm + eps)), 0.05f, 1.0f);
-            targetGain[static_cast<size_t> (b)] = 1.0f - (1.0f - g_target) * risk * gate;
-        }
-    }
+    updateTargetGains (targetGain);
 
     for (int i = 0; i < numSamples; ++i)
     {
@@ -282,6 +265,9 @@ void MonoGuard::processMS (float* mid, float* side, int numSamples) noexcept
                 deltaSide += (1.0f - targetGain[static_cast<size_t> (b)]) * sb;
             }
         }
+
+        if ((i & 31) == 31)
+            updateTargetGains (targetGain);
 
         if (protect)
         {

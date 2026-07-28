@@ -18,6 +18,7 @@ constexpr double powerEpsilon = 1.0e-12;
 constexpr double stateFlushThreshold = 1.0e-24;
 constexpr double powerReleaseSeconds = 0.080;
 constexpr double maximumDetectorInput = 1.0e6;
+constexpr double twoPi = 6.28318530717958647692;
 
 [[nodiscard]] double finiteOr (double value, double fallback) noexcept
 {
@@ -78,6 +79,8 @@ void SidechainAnalyzer::reset() noexcept
     sidechainFilterStates = {};
     smoothedMainPower = {};
     smoothedSidechainPower = {};
+    keyHighPassPreviousInput = 0.0;
+    keyHighPassPreviousOutput = 0.0;
     nextSequence = 1;
     newestHistorySlot.store (0, std::memory_order_relaxed);
     validHistoryFrames.store (0, std::memory_order_relaxed);
@@ -102,11 +105,29 @@ void SidechainAnalyzer::process (
     const float* const* sidechainChannels, int numSidechainChannels,
     int numSamples) noexcept
 {
+    processDerived (mainChannels, numMainChannels, sidechainChannels,
+                    numSidechainChannels, numSamples, nullptr);
+}
+
+void SidechainAnalyzer::processInternal (
+    const float* const* mainChannels, int numMainChannels,
+    int numSamples, InternalKey key) noexcept
+{
+    processDerived (mainChannels, numMainChannels, nullptr, 0,
+                    numSamples, &key);
+}
+
+void SidechainAnalyzer::processDerived (
+    const float* const* mainChannels, int numMainChannels,
+    const float* const* sidechainChannels, int numSidechainChannels,
+    int numSamples, const InternalKey* internalKey) noexcept
+{
     if (! enabled.load (std::memory_order_relaxed) || numSamples <= 0)
         return;
 
     if (mainChannels == nullptr || numMainChannels <= 0
-        || sidechainChannels == nullptr || numSidechainChannels <= 0)
+        || (internalKey == nullptr
+            && (sidechainChannels == nullptr || numSidechainChannels <= 0)))
     {
         mainFilterStates = {};
         sidechainFilterStates = {};
@@ -117,8 +138,10 @@ void SidechainAnalyzer::process (
     }
 
     const auto mainCount = std::clamp (numMainChannels, 1, 2);
-    const auto sidechainCount = std::clamp (numSidechainChannels, 1, 2);
-    if (mainChannels[0] == nullptr || sidechainChannels[0] == nullptr)
+    const auto sidechainCount =
+        internalKey == nullptr ? std::clamp (numSidechainChannels, 1, 2) : 0;
+    if (mainChannels[0] == nullptr
+        || (internalKey == nullptr && sidechainChannels[0] == nullptr))
     {
         mainFilterStates = {};
         sidechainFilterStates = {};
@@ -130,18 +153,57 @@ void SidechainAnalyzer::process (
 
     BandValues blockMainPower {};
     BandValues blockSidechainPower {};
+    const auto keyHighPassCoefficient =
+        internalKey != nullptr
+            ? std::exp (
+                -twoPi
+                * std::clamp (
+                    static_cast<double> (
+                        internalKeyHighPassHz.load (
+                            std::memory_order_relaxed)),
+                    20.0, 0.45 * currentSampleRate)
+                / currentSampleRate)
+            : 0.0;
 
     for (int sample = 0; sample < numSamples; ++sample)
     {
         double main = safeAudioSample (mainChannels[0][sample]);
-        double sidechain = safeAudioSample (sidechainChannels[0][sample]);
+        double sidechain = 0.0;
         if (mainCount > 1 && mainChannels[1] != nullptr)
             main =
                 0.5 * (main + safeAudioSample (mainChannels[1][sample]));
-        if (sidechainCount > 1 && sidechainChannels[1] != nullptr)
-            sidechain =
-                0.5 * (sidechain
-                       + safeAudioSample (sidechainChannels[1][sample]));
+
+        if (internalKey != nullptr)
+        {
+            const auto left = safeAudioSample (mainChannels[0][sample]);
+            const auto right =
+                mainCount > 1 && mainChannels[1] != nullptr
+                    ? safeAudioSample (mainChannels[1][sample]) : left;
+            if (*internalKey == InternalKey::side)
+                sidechain = (left - right) * 0.7071067811865476;
+            else if (*internalKey == InternalKey::mid)
+                sidechain = (left + right) * 0.7071067811865476;
+            else
+                sidechain = main;
+
+            const auto filteredKey =
+                keyHighPassCoefficient
+                * (keyHighPassPreviousOutput + sidechain
+                   - keyHighPassPreviousInput);
+            keyHighPassPreviousInput = sidechain;
+            keyHighPassPreviousOutput =
+                std::abs (filteredKey) < stateFlushThreshold
+                    ? 0.0 : filteredKey;
+            sidechain = keyHighPassPreviousOutput;
+        }
+        else
+        {
+            sidechain = safeAudioSample (sidechainChannels[0][sample]);
+            if (sidechainCount > 1 && sidechainChannels[1] != nullptr)
+                sidechain =
+                    0.5 * (sidechain
+                           + safeAudioSample (sidechainChannels[1][sample]));
+        }
 
         for (std::size_t band = 0; band < numBands; ++band)
         {
@@ -205,8 +267,15 @@ void SidechainAnalyzer::process (
 
         overlap[band] = unitFinite (overlapValue);
         dominance[band] = unitFinite (dominanceValue);
-        masking[band] = unitFinite (
-            overlapValue * dominanceValue * activity);
+        // In a self-key mode there is no competing external source whose
+        // dominance must be estimated.  Applying the external-source 0.5
+        // dominance factor to Main-vs-Main capped masking at exactly the
+        // default threshold, preventing every automatic carver band.
+        const auto maskingValue =
+            internalKey != nullptr
+                ? overlapValue * activity
+                : overlapValue * dominanceValue * activity;
+        masking[band] = unitFinite (maskingValue);
         dominant[band] = sidechainP > mainP && activity > 0.0;
     }
 
@@ -235,6 +304,15 @@ void SidechainAnalyzer::setActivityThresholdDb (float thresholdDb) noexcept
 float SidechainAnalyzer::getActivityThresholdDb() const noexcept
 {
     return activityThresholdDb.load (std::memory_order_relaxed);
+}
+
+void SidechainAnalyzer::setInternalKeyHighPassHz (
+    float frequencyHz) noexcept
+{
+    if (std::isfinite (frequencyHz))
+        internalKeyHighPassHz.store (
+            std::clamp (frequencyHz, 20.0f, 500.0f),
+            std::memory_order_relaxed);
 }
 
 void SidechainAnalyzer::setCarveParameters (

@@ -1,6 +1,10 @@
 #include "PluginProcessor.h"
 
 #include "ParameterIDs.h"
+// MonoGuard.cpp is not listed by the existing build target. The task forbids
+// changing CMake, so compile the existing implementation in this translation
+// unit until the project source list can be corrected.
+#include "DSP/MonoGuard.cpp"
 
 #if __has_include("PluginEditor.h")
 #include "PluginEditor.h"
@@ -313,6 +317,9 @@ void ShredEQAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     tightCut.prepare (sampleRate, samplesPerBlock);
     chugStabilizer.prepare (sampleRate, samplesPerBlock);
     multibandEngine.prepare (sampleRate, samplesPerBlock);
+    sidechainAnalyzer.prepare (sampleRate, samplesPerBlock);
+    maskingCarver.prepare (sampleRate, samplesPerBlock);
+    monoGuard.prepare (sampleRate, samplesPerBlock);
 
     spectralAnalysisEngine.prepare (sampleRate, samplesPerBlock, 2048, 512);
     resonanceDetector.prepare (sampleRate, 2048);
@@ -341,6 +348,9 @@ void ShredEQAudioProcessor::releaseResources()
     tightCut.reset();
     chugStabilizer.reset();
     multibandEngine.reset();
+    sidechainAnalyzer.reset();
+    maskingCarver.reset();
+    monoGuard.reset();
 
     spectralAnalysisEngine.setEnabled (false);
     resonanceDetector.setEnabled (false);
@@ -355,6 +365,9 @@ void ShredEQAudioProcessor::reset()
     tightCut.reset();
     chugStabilizer.reset();
     multibandEngine.reset();
+    sidechainAnalyzer.reset();
+    maskingCarver.reset();
+    monoGuard.reset();
 
     spectralAnalysisEngine.reset();
     resonanceDetector.reset();
@@ -418,6 +431,9 @@ void ShredEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         chugStabilizer.reset();
         multibandEngine.reset();
         resonanceSuppressor.reset();
+        sidechainAnalyzer.reset();
+        maskingCarver.reset();
+        monoGuard.reset();
         return;
     }
 
@@ -429,6 +445,26 @@ void ShredEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         for (int channel = 0; channel < numChannels; ++channel)
             channels[channel][sample] *= gain;
     }
+
+    const auto globalTrackingSource =
+        getChoiceParam (ShredEQ::ParameterIDs::NoteFollower::trackingSource);
+    const auto globalHarmonic =
+        getChoiceParam (ShredEQ::ParameterIDs::NoteFollower::harmonic) + 1;
+    const auto noteCents =
+        getParamValue (ShredEQ::ParameterIDs::NoteFollower::centsOffset);
+    const auto noteConfidence =
+        getParamValue (ShredEQ::ParameterIDs::NoteFollower::confidenceThreshold) / 100.0;
+    const auto noteSmoothing =
+        getParamValue (ShredEQ::ParameterIDs::NoteFollower::smoothing);
+    const auto noteHold =
+        getParamValue (ShredEQ::ParameterIDs::NoteFollower::holdTime);
+    const auto noteReturn =
+        getParamValue (ShredEQ::ParameterIDs::NoteFollower::returnTime);
+    const auto noteMinimum =
+        getParamValue (ShredEQ::ParameterIDs::NoteFollower::minFreq);
+    const auto noteMaximum =
+        getParamValue (ShredEQ::ParameterIDs::NoteFollower::maxFreq);
+    pitchDetector.setFrequencyRange (noteMinimum, noteMaximum);
 
     // Feed the analysis layer from the conditioned main input.
     if (getBoolParam (ShredEQ::ParameterIDs::analyzerEnable))
@@ -497,8 +533,8 @@ void ShredEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     chugStabilizer.setAttackMs (getParamValue (ShredEQ::ParameterIDs::Chug::attack));
     chugStabilizer.setHoldMs (getParamValue (ShredEQ::ParameterIDs::Chug::hold));
     chugStabilizer.setReleaseMs (getParamValue (ShredEQ::ParameterIDs::Chug::release));
-    chugStabilizer.setPreservePick (
-        getParamValue (ShredEQ::ParameterIDs::Chug::preservePick) > 0.0f);
+    chugStabilizer.setPreservePickAmount (
+        getParamValue (ShredEQ::ParameterIDs::Chug::preservePick) / 100.0);
     chugStabilizer.setTransientSensitivity (
         getParamValue (ShredEQ::ParameterIDs::Chug::transientSens) / 100.0);
     chugStabilizer.setDominanceSensitivity (
@@ -517,6 +553,8 @@ void ShredEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         const auto lookaheadIndex = static_cast<std::size_t> (
             juce::jlimit (0, 4, getChoiceParam (ids.lookahead)));
         const auto trackingSource = getChoiceParam (ids.trackingSource);
+        const auto effectiveTrackingSource =
+            trackingSource != 0 ? trackingSource : globalTrackingSource;
 
         band.setEnabled (getBoolParam (ids.enabled));
         band.setStage (static_cast<ShredEQ::DSP::BandStage> (getChoiceParam (ids.stage)));
@@ -540,9 +578,19 @@ void ShredEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         band.setDetectorSource (getChoiceParam (ids.detectorSource));
         band.setDetectorFrequency (getParamValue (ids.detectorFrequency));
         band.setDetectorQ (getParamValue (ids.detectorQ));
-        band.setTrackingSource (trackingSource);
-        band.setTrackingHarmonic (getChoiceParam (ids.trackingHarmonic) + 1);
-        band.setNoteFollowerEnabled (trackingSource != 0);
+        band.setTrackingSource (std::max (0, effectiveTrackingSource - 1));
+        band.setTrackingHarmonic (juce::jlimit (
+            1, 8, globalHarmonic
+                * (getChoiceParam (ids.trackingHarmonic) + 1)));
+        band.setCentsOffset (noteCents);
+        band.setConfidenceThreshold (noteConfidence);
+        band.setSmoothing (noteSmoothing);
+        band.setHoldTimeMs (noteHold);
+        band.setReturnTimeMs (noteReturn);
+        band.setHomeFrequencyHz (getParamValue (ids.frequency));
+        band.setFrequencyLimits (noteMinimum, noteMaximum);
+        band.setNoteFollowerEnabled (effectiveTrackingSource != 0);
+        band.updateNoteFollower (pitchDetector.getLatestResult(), numSamples);
         band.setLookaheadMs (lookaheadMilliseconds[lookaheadIndex]);
     }
 
@@ -607,6 +655,49 @@ void ShredEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     const float* const* sidechainChannels = sidechainEnabled
         ? sidechainBuffer.getArrayOfReadPointers() : nullptr;
     const auto numSidechainChannels = sidechainEnabled ? sidechainBuffer.getNumChannels() : 0;
+    const auto lockInEnabled =
+        getBoolParam (ShredEQ::ParameterIDs::Sidechain::lockInEnabled);
+    const auto carveMaximum =
+        getParamValue (ShredEQ::ParameterIDs::Sidechain::carveMaxGain);
+    const auto carveThreshold =
+        getParamValue (ShredEQ::ParameterIDs::Sidechain::carveThreshold);
+    const auto carveScale =
+        48.0f * getParamValue (ShredEQ::ParameterIDs::Sidechain::lockInAmount)
+        / 100.0f;
+
+    sidechainAnalyzer.setEnabled (lockInEnabled);
+    sidechainAnalyzer.setCarveParameters (
+        carveMaximum, carveScale, carveThreshold);
+    maskingCarver.setEnabled (lockInEnabled);
+    maskingCarver.setMode (ShredEQ::DSP::MaskingCarverMode::automatic);
+    maskingCarver.setCarveParameters (
+        carveMaximum, carveScale, carveThreshold);
+
+    if (lockInEnabled && sidechainEnabled)
+    {
+        sidechainAnalyzer.process (
+            mainBuffer.getArrayOfReadPointers(), numChannels,
+            sidechainChannels, numSidechainChannels, numSamples);
+        maskingCarver.importAnalyzerMetrics (sidechainAnalyzer);
+
+        const auto suggestionCount = std::min (
+            maskingCarver.getNumSuggestions(),
+            ShredEQ::DSP::MaskingCarver::maxBands);
+        for (std::size_t index = 0;
+             index < ShredEQ::DSP::MaskingCarver::maxBands; ++index)
+        {
+            if (index < suggestionCount)
+                (void) maskingCarver.acceptSuggestion (index, index, true);
+            else
+                maskingCarver.setBandEnabled (index, false);
+        }
+    }
+    else
+    {
+        for (std::size_t index = 0;
+             index < ShredEQ::DSP::MaskingCarver::maxBands; ++index)
+            maskingCarver.setBandEnabled (index, false);
+    }
 
     const auto processTightCut = [&]() noexcept
     {
@@ -616,6 +707,7 @@ void ShredEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         if (numChannels == 2 && tightCutRouting != ShredEQ::DSP::TightCut::Routing::stereo)
         {
             midSideRouter.setEnabled (true);
+            midSideRouter.setSideHighPassEnabled (false);
             midSideRouter.processEncode (channels, numChannels, numSamples);
             tightCut.process (channels, numChannels, numSamples, true);
             midSideRouter.processDecode (channels, numChannels, numSamples);
@@ -653,6 +745,7 @@ void ShredEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
             return;
 
         midSideRouter.setEnabled (true);
+        midSideRouter.setSideHighPassEnabled (false);
         midSideRouter.processEncode (channels, numChannels, numSamples);
         for (auto& band : parametricEQ.getBands())
         {
@@ -686,7 +779,31 @@ void ShredEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     if (multibandEnabled)
         multibandEngine.process (mainBuffer, sidechainBufferPtr);
 
+    if (lockInEnabled && sidechainEnabled)
+        maskingCarver.process (channels, numChannels, numSamples);
+
     processParametricStage (ShredEQ::DSP::BandStage::stageB);
+
+    if (numChannels == 2)
+    {
+        midSideRouter.setSideHighPassHz (
+            getParamValue (ShredEQ::ParameterIDs::MidSide::sideHighPass));
+        midSideRouter.setSideHighPassEnabled (true);
+        midSideRouter.setEnabled (true);
+        midSideRouter.processEncode (channels, numChannels, numSamples);
+        midSideRouter.processDecode (channels, numChannels, numSamples);
+        midSideRouter.setEnabled (false);
+        midSideRouter.setSideHighPassEnabled (false);
+
+        const auto monoGuardEnabled = getBoolParam (
+            ShredEQ::ParameterIDs::MidSide::monoGuardEnabled);
+        monoGuard.setEnabled (monoGuardEnabled);
+        monoGuard.setProtectionEnabled (monoGuardEnabled);
+        monoGuard.setProtectionAmount (getParamValue (
+            ShredEQ::ParameterIDs::MidSide::monoGuardProtection));
+        if (monoGuardEnabled)
+            monoGuard.process (channels, numChannels, numSamples);
+    }
 
     outputGain.setTargetValue (juce::Decibels::decibelsToGain (
         getParamValue (ShredEQ::ParameterIDs::outputGain)));

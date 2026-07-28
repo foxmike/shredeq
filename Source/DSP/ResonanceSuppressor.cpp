@@ -35,6 +35,10 @@ void SuppressorSlot::reset() noexcept
     channelStates[1].reset();
     currentDepthDb = 0.0;
     targetDynamicDepth = 0.0;
+    candidateTargetDepth = 0.0;
+    detectorEnvelope = 0.0;
+    detectorStates[0].reset();
+    detectorStates[1].reset();
     smoothedFrequency.setCurrentAndTargetValue (targetFrequency);
     smoothedQ.setCurrentAndTargetValue (targetQ);
 }
@@ -71,7 +75,7 @@ void SuppressorSlot::updateDepthTarget (const ResonanceDetector& detector) noexc
 {
     if (isStaticMode || !enabled)
     {
-        targetDynamicDepth = 0.0;
+        candidateTargetDepth = 0.0;
         return;
     }
 
@@ -96,11 +100,12 @@ void SuppressorSlot::updateDepthTarget (const ResonanceDetector& detector) noexc
 
     if (foundMatch && (bestPersistence * 100.0 >= persistenceRequirement))
     {
-        targetDynamicDepth = std::clamp (static_cast<double> (bestExcess), 0.0, targetMaxDepth);
+        candidateTargetDepth = std::clamp (
+            static_cast<double> (bestExcess), 0.0, targetMaxDepth);
     }
     else
     {
-        targetDynamicDepth = 0.0;
+        candidateTargetDepth = 0.0;
     }
 }
 
@@ -131,6 +136,8 @@ void SuppressorSlot::calculateCoefficients (double sampleRate, double freq, doub
         cachedCosine = std::cos (omega);
         const auto sine = std::sin (omega);
         cachedAlpha = sine / (2.0 * q);
+        detectorCoefficients = BiquadCoefficients::makeSecondOrder (
+            FilterKind::bandPass, sampleRate, freq, q, 0.0);
     }
 
     const auto amplitude = std::pow (10.0, -depthDb / 40.0);
@@ -152,6 +159,38 @@ void SuppressorSlot::processSample (double& left, double& right, double sampleRa
     const double q = smoothedQ.getNextValue();
 
     calculateCoefficients (sampleRate, freq, q, currentDepthDb);
+
+    if (!isStaticMode && !freeze)
+    {
+        const auto detectorLeft = detectorStates[0].process (
+            left, detectorCoefficients.b0, detectorCoefficients.b1,
+            detectorCoefficients.b2, detectorCoefficients.a1,
+            detectorCoefficients.a2);
+        const auto detectorRight = detectorStates[1].process (
+            right, detectorCoefficients.b0, detectorCoefficients.b1,
+            detectorCoefficients.b2, detectorCoefficients.a1,
+            detectorCoefficients.a2);
+        const auto magnitude =
+            0.5 * (std::abs (detectorLeft) + std::abs (detectorRight));
+        const auto envelopeTimeMs =
+            magnitude > detectorEnvelope ? attackMs : releaseMs;
+        const auto coefficient = 1.0 - std::exp (
+            -1.0 / (std::max (0.1, envelopeTimeMs)
+                    * 0.001 * std::max (sampleRate, 1.0)));
+        detectorEnvelope += coefficient * (magnitude - detectorEnvelope);
+
+        const auto levelDb =
+            20.0 * std::log10 (detectorEnvelope + 1.0e-12);
+        const auto activity = std::clamp ((levelDb + 72.0) / 60.0, 0.0, 1.0);
+        const auto requiredActivity = std::clamp (
+            persistenceRequirement / 100.0, 0.0, 1.0) * 0.9;
+        const auto persistentActivity = std::clamp (
+            (activity - requiredActivity)
+                / std::max (0.1, 1.0 - requiredActivity),
+            0.0, 1.0);
+        targetDynamicDepth = std::max (
+            candidateTargetDepth, targetMaxDepth * persistentActivity);
+    }
 
     if (currentDepthDb < 0.001)
         return;

@@ -249,31 +249,52 @@ ChugStabilizer::detect (double monoInput) noexcept
         std::clamp (finiteOr (transientSensitivity.load(), 0.5), 0.0, 1.0);
     const auto dominanceSens =
         std::clamp (finiteOr (dominanceSensitivity.load(), 0.5), 0.0, 1.0);
-    constexpr double w1 = 1.0 / 12.0;
-    const auto w2 = (0.2 + 1.8 * transientSens) / 0.8;
-    const auto w3 = (0.2 + 1.8 * dominanceSens) / 12.0;
-    auto score = w1 * energyTerm + w2 * derivativeTerm
-                 + w3 * dominanceTerm;
-
-    // A pick has fast broadband/high-frequency excess, while a palm mute has
-    // low/mid dominance. Only the former receives preservation.
     const auto broadbandTransientDb =
         20.0 * std::log10 ((broadFastEnvelope + pickEnvelope + detectorEpsilon)
                            / (broadSlowEnvelope + detectorEpsilon));
-    if (preservePick.load() && dominanceTerm <= 0.0
-        && broadbandTransientDb > 3.0)
+    // Normalise the three terms independently.  The old weights allowed a
+    // tiny amount of detector leakage (or a single large derivative) to pin
+    // the score at one.  Apart from over-processing steady midrange material,
+    // that saturation made both sensitivity controls inaudible.
+    const auto lowDominanceDb = lowDb - midDb;
+    const auto dominanceGate =
+        std::clamp ((lowDominanceDb + 3.0) / 12.0, 0.0, 1.0);
+    const auto transientGate =
+        std::clamp (derivativeTerm / 12.0, 0.0, 1.0);
+    const auto onsetGate =
+        std::max (dominanceGate,
+                  std::clamp ((broadbandTransientDb - 1.0) / 8.0,
+                              0.0, 1.0));
+    const auto energyContribution =
+        0.55 * std::clamp (energyTerm / 18.0, 0.0, 1.0)
+        * std::max (dominanceGate, 0.25 * transientGate);
+    const auto transientContribution =
+        (0.10 + 0.45 * transientSens) * transientGate * onsetGate;
+    const auto dominanceContribution =
+        (0.10 + 0.55 * dominanceSens)
+        * std::clamp (dominanceTerm / 12.0, 0.0, 1.0);
+    auto score = energyContribution + transientContribution
+                 + dominanceContribution;
+
+    // A pick has fast broadband/high-frequency excess, while a palm mute has
+    // low/mid dominance. Only the former receives preservation.
+    const auto preserveAmount = std::clamp (
+        finiteOr (preservePickAmount.load(), 0.5), 0.0, 1.0);
+    if (preserveAmount > 0.0 && broadbandTransientDb > 3.0)
     {
-        const auto preservation =
-            std::clamp ((broadbandTransientDb - 3.0) / 12.0, 0.0, 0.8);
+        const auto lowDominanceProtection =
+            1.0 - std::clamp (dominanceTerm / 12.0, 0.0, 1.0);
+        const auto preservation = preserveAmount * lowDominanceProtection
+            * std::clamp ((broadbandTransientDb - 3.0) / 12.0, 0.0, 0.8);
         score *= 1.0 - preservation;
     }
 
     TriggerSource trigger = TriggerSource::none;
     auto largestContribution = 0.0;
     const std::array<std::pair<double, TriggerSource>, 3> contributions {{
-        { w1 * energyTerm, TriggerSource::rawEnergy },
-        { w2 * derivativeTerm, TriggerSource::transientAcceleration },
-        { w3 * dominanceTerm, TriggerSource::dominance }
+        { energyContribution, TriggerSource::rawEnergy },
+        { transientContribution, TriggerSource::transientAcceleration },
+        { dominanceContribution, TriggerSource::dominance }
     }};
     for (const auto& contribution : contributions)
     {
@@ -470,12 +491,18 @@ double ChugStabilizer::getReleaseMs() const noexcept
 
 void ChugStabilizer::setPreservePick (bool value) noexcept
 {
-    preservePick.store (value);
+    preservePickAmount.store (value ? 1.0 : 0.0);
+}
+
+void ChugStabilizer::setPreservePickAmount (double value) noexcept
+{
+    preservePickAmount.store (
+        std::clamp (finiteOr (value, 0.5), 0.0, 1.0));
 }
 
 bool ChugStabilizer::isPreservePickEnabled() const noexcept
 {
-    return preservePick.load();
+    return preservePickAmount.load() > 0.0;
 }
 
 void ChugStabilizer::setTransientSensitivity (double value) noexcept

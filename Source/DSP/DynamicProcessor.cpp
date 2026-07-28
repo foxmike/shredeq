@@ -39,7 +39,10 @@ void DynamicProcessor::reset() noexcept
     bandPassFilter.reset();
 
     lastGainLinear = 1.0f;
+    lastGainChangeDb = 0.0f;
     lastGainReductionDb = 0.0f;
+    heldTargetDb = 0.0;
+    holdSamplesRemaining = 0;
 
     visualizationData.staticGainDb = static_cast<float> (staticGainDb);
     visualizationData.maxDynamicRangeDb = static_cast<float> (rangeDb);
@@ -120,7 +123,7 @@ float DynamicProcessor::processSample (float primarySample, const DetectorContex
     if (mode != DynamicMode::staticEq)
     {
         const double safeRatio = std::max (1.0, ratio);
-        const double safeRange = std::max (0.0, rangeDb);
+        const double safeRange = std::abs (rangeDb);
         const double safeKnee = std::max (0.0, kneeDb);
 
         if (mode == DynamicMode::expansion)
@@ -151,7 +154,22 @@ float DynamicProcessor::processSample (float primarySample, const DetectorContex
         }
     }
 
-    const double smoothedGainDb = gainSmoother.processSample (g_target);
+    if (std::abs (g_target) > std::abs (heldTargetDb))
+    {
+        heldTargetDb = g_target;
+        holdSamplesRemaining = static_cast<int> (
+            std::max (0.0, holdMs) * 0.001 * currentSampleRate);
+    }
+    else if (holdSamplesRemaining > 0)
+    {
+        --holdSamplesRemaining;
+    }
+    else
+    {
+        heldTargetDb = g_target;
+    }
+
+    const double smoothedGainDb = gainSmoother.processSample (heldTargetDb);
 
     float multiplier = 1.0f;
     if (mode != DynamicMode::staticEq && std::abs (staticGainDb) > 1.0e-5)
@@ -160,6 +178,7 @@ float DynamicProcessor::processSample (float primarySample, const DetectorContex
     }
 
     lastGainLinear = multiplier;
+    lastGainChangeDb = static_cast<float> (smoothedGainDb);
     lastGainReductionDb = static_cast<float> (std::abs (smoothedGainDb));
 
     // Update visualization data
@@ -244,6 +263,11 @@ void DynamicProcessor::setAttackMs (double newAttackMs) noexcept
 
     separator.setFastAttackMs (attackMs);
     separator.setSlowAttackMs (attackMs * 5.0);
+}
+
+void DynamicProcessor::setHoldMs (double newHoldMs) noexcept
+{
+    holdMs = std::clamp (newHoldMs, 0.0, 500.0);
 }
 
 void DynamicProcessor::setReleaseMs (double newReleaseMs) noexcept

@@ -19,6 +19,7 @@ ParametricBand::ParametricBand() noexcept
     dynamicProcessor.setThresholdDb (thresholdDb.load());
     dynamicProcessor.setRatio (ratio.load());
     dynamicProcessor.setAttackMs (attackMs.load());
+    dynamicProcessor.setHoldMs (holdMs.load());
     dynamicProcessor.setReleaseMs (releaseMs.load());
     dynamicProcessor.setKneeDb (kneeDb.load());
     dynamicProcessor.setDetectorSource (static_cast<DetectorSource> (detectorSource.load()));
@@ -162,9 +163,10 @@ void ParametricBand::process (float* const* channels, int numChannels, int numSa
             context.output = outputMono;
 
             const float primarySample = inputMono;
-            const float multiplier = dynamicProcessor.processSample (primarySample, context, static_cast<float> (g));
-
-            const double modulatedGainDb = g * multiplier;
+            (void) dynamicProcessor.processSample (
+                primarySample, context, static_cast<float> (g));
+            const double modulatedGainDb =
+                g + dynamicProcessor.currentGainChangeDb();
             updateActiveCoefficients (f, modulatedGainDb, q);
 
             if (tpt)
@@ -479,6 +481,7 @@ double ParametricBand::getAttackMs() const noexcept
 void ParametricBand::setHoldMs (double h) noexcept
 {
     holdMs = h;
+    dynamicProcessor.setHoldMs (h);
 }
 
 double ParametricBand::getHoldMs() const noexcept
@@ -580,6 +583,8 @@ void ParametricBand::attachNoteFollower (NoteFollower* follower) noexcept
 void ParametricBand::setNoteFollowerEnabled (bool shouldBeEnabled) noexcept
 {
     noteFollowerEnabled = shouldBeEnabled;
+    if (auto* follower = attachedFollower.load())
+        follower->setEnabled (shouldBeEnabled);
 }
 
 bool ParametricBand::isNoteFollowerEnabled() const noexcept
@@ -655,6 +660,14 @@ void ParametricBand::setFrequencyLimits (double minFreq, double maxFreq) noexcep
 {
     if (auto* follower = attachedFollower.load())
         follower->setFrequencyLimits (minFreq, maxFreq);
+}
+
+void ParametricBand::updateNoteFollower (
+    const PitchResult& result, int numSamples) noexcept
+{
+    if (auto* follower = attachedFollower.load())
+        follower->update (
+            result.frequencyHz, result.confidence, numSamples);
 }
 
 void ParametricBand::setLookaheadMs (double ms) noexcept

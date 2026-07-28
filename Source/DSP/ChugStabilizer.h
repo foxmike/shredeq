@@ -94,13 +94,13 @@ public:
     [[nodiscard]] double getBandwidthOctaves() const noexcept;
 
     void setMaximumReductionDb (double reductionDb) noexcept;
-    void setMaxReductionDb (double reductionDb) noexcept
+    void setMaxReductionDb (double amountDb) noexcept
     {
-        setMaximumReductionDb (reductionDb);
+        setMaximumReductionDb (amountDb);
     }
-    void setMaxReduction (double reductionDb) noexcept
+    void setMaxReduction (double amountDb) noexcept
     {
-        setMaximumReductionDb (reductionDb);
+        setMaximumReductionDb (amountDb);
     }
     [[nodiscard]] double getMaximumReductionDb() const noexcept;
 
@@ -121,6 +121,7 @@ public:
     [[nodiscard]] double getReleaseMs() const noexcept;
 
     void setPreservePick (bool shouldPreservePick) noexcept;
+    void setPreservePickAmount (double amount) noexcept;
     [[nodiscard]] bool isPreservePickEnabled() const noexcept;
     void setTransientSensitivity (double sensitivity) noexcept;
     void setTransientSens (double sensitivity) noexcept
@@ -197,7 +198,7 @@ private:
     std::atomic<double> attackTimeMs { 3.0 };
     std::atomic<double> holdTimeMs { 25.0 };
     std::atomic<double> releaseTimeMs { 100.0 };
-    std::atomic<bool> preservePick { true };
+    std::atomic<double> preservePickAmount { 0.5 };
     std::atomic<double> transientSensitivity { 0.5 };
     std::atomic<double> dominanceSensitivity { 0.5 };
     std::atomic<double> staticSupportGainDb { 0.0 };

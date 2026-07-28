@@ -479,7 +479,10 @@ double MultibandZone::getEffectiveThresholdDb (double manualThresholdDb, double 
     if (! autoThreshold.load (std::memory_order_relaxed))
         return manualThresholdDb;
 
-    return std::clamp (baselineDb + 8.0, -90.0, 0.0);
+    // In auto mode the manual control remains a user offset around its
+    // documented -24 dB default instead of becoming an inert parameter.
+    return std::clamp (
+        baselineDb + 8.0 + (manualThresholdDb + 24.0), -90.0, 0.0);
 }
 
 } // namespace ShredEQ::DSP

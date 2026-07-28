@@ -190,6 +190,7 @@ public:
     void setReturnTimeMs (double returnTimeMs) noexcept;
     void setHomeFrequencyHz (double homeFreq) noexcept;
     void setFrequencyLimits (double minFreq, double maxFreq) noexcept;
+    void updateNoteFollower (const PitchResult& result, int numSamples) noexcept;
 
 private:
     bool shouldUseTpt() const noexcept;

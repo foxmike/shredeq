@@ -6,6 +6,9 @@
 #include "DSP/TightCut.h"
 #include "DSP/ChugStabilizer.h"
 #include "DSP/MultibandEngine.h"
+#include "DSP/SidechainAnalyzer.h"
+#include "DSP/MaskingCarver.h"
+#include "DSP/MonoGuard.h"
 #include "Analysis/SpectralAnalysisEngine.h"
 #include "DSP/ResonanceDetector.h"
 #include "DSP/ResonanceSuppressor.h"
@@ -65,6 +68,9 @@ private:
     ShredEQ::DSP::TightCut tightCut;
     ShredEQ::DSP::ChugStabilizer chugStabilizer;
     ShredEQ::DSP::MultibandEngine multibandEngine;
+    ShredEQ::DSP::SidechainAnalyzer sidechainAnalyzer;
+    ShredEQ::DSP::MaskingCarver maskingCarver;
+    ShredEQ::DSP::MonoGuard monoGuard;
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> inputGain;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> outputGain;

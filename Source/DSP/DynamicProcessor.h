@@ -135,6 +135,7 @@ public:
     void setKneeDb (double newKneeDb) noexcept;
     void setRangeDb (double newRangeDb) noexcept;
     void setAttackMs (double newAttackMs) noexcept;
+    void setHoldMs (double newHoldMs) noexcept;
     void setReleaseMs (double newReleaseMs) noexcept;
     void setStaticGainDb (double newStaticGainDb) noexcept;
     void setDetectorFrequency (double newFreqHz) noexcept;
@@ -148,12 +149,14 @@ public:
     [[nodiscard]] double getKneeDb() const noexcept { return kneeDb; }
     [[nodiscard]] double getRangeDb() const noexcept { return rangeDb; }
     [[nodiscard]] double getAttackMs() const noexcept { return attackMs; }
+    [[nodiscard]] double getHoldMs() const noexcept { return holdMs; }
     [[nodiscard]] double getReleaseMs() const noexcept { return releaseMs; }
     [[nodiscard]] double getStaticGainDb() const noexcept { return staticGainDb; }
     [[nodiscard]] double getDetectorFrequency() const noexcept { return detectorFrequency; }
     [[nodiscard]] double getDetectorQ() const noexcept { return detectorQ; }
 
     [[nodiscard]] float currentGainLinear() const noexcept { return lastGainLinear; }
+    [[nodiscard]] float currentGainChangeDb() const noexcept { return lastGainChangeDb; }
     [[nodiscard]] float currentGainReductionDb() const noexcept { return lastGainReductionDb; }
     [[nodiscard]] DynamicVisualizationData getVisualizationData() const noexcept { return visualizationData; }
 
@@ -170,6 +173,7 @@ private:
     double kneeDb = 6.0;
     double rangeDb = 12.0;
     double attackMs = 10.0;
+    double holdMs = 0.0;
     double releaseMs = 150.0;
     double staticGainDb = 0.0;
     double detectorFrequency = 1000.0;
@@ -185,7 +189,10 @@ private:
     DynamicVisualizationData visualizationData;
 
     float lastGainLinear = 1.0f;
+    float lastGainChangeDb = 0.0f;
     float lastGainReductionDb = 0.0f;
+    double heldTargetDb = 0.0;
+    int holdSamplesRemaining = 0;
 };
 
 } // namespace ShredEQ::DSP

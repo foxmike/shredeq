@@ -110,7 +110,9 @@ private:
 
     // Dynamic state
     double targetDynamicDepth = 0.0;
+    double candidateTargetDepth = 0.0;
     double currentDepthDb = 0.0;
+    double detectorEnvelope = 0.0;
 
     // Smoothed values for audio parameter sweeps
     juce::SmoothedValue<double, juce::ValueSmoothingTypes::Multiplicative> smoothedFrequency { 3000.0 };
@@ -123,8 +125,10 @@ private:
     double lastSampleRate = 0.0;
     double cachedCosine = 0.0;
     double cachedAlpha = 0.0;
+    BiquadCoefficients detectorCoefficients;
 
     std::array<BiquadState, 2> channelStates;
+    std::array<BiquadState, 2> detectorStates;
 };
 
 /**

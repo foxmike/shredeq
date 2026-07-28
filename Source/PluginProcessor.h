@@ -1,6 +1,8 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include "DSP/ParametricBand.h"
+#include "DSP/MidSideRouter.h"
 #include "DSP/TightCut.h"
 #include "DSP/ChugStabilizer.h"
 #include "DSP/MultibandEngine.h"
@@ -54,12 +56,19 @@ public:
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
+    [[nodiscard]] float getParamValue (const char* parameterID) const noexcept;
 
     juce::AudioProcessorValueTreeState apvts;
 
+    ShredEQ::DSP::ParametricEQ parametricEQ;
+    ShredEQ::DSP::MidSideRouter midSideRouter;
     ShredEQ::DSP::TightCut tightCut;
     ShredEQ::DSP::ChugStabilizer chugStabilizer;
     ShredEQ::DSP::MultibandEngine multibandEngine;
+
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> inputGain;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> outputGain;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> outputTrim;
 
     // Phase G additions
     ShredEQ::Analysis::SpectralAnalysisEngine spectralAnalysisEngine;
@@ -72,4 +81,3 @@ private:
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ShredEQAudioProcessor)
 };
-

@@ -297,8 +297,19 @@ ShredEQAudioProcessor::createParameterLayout()
     return layout;
 }
 
+float ShredEQAudioProcessor::getParamValue (const char* parameterID) const noexcept
+{
+    if (const auto* value = apvts.getRawParameterValue (parameterID))
+        return value->load (std::memory_order_relaxed);
+
+    jassertfalse;
+    return 0.0f;
+}
+
 void ShredEQAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    parametricEQ.prepare (sampleRate, samplesPerBlock);
+    midSideRouter.prepare (sampleRate, samplesPerBlock);
     tightCut.prepare (sampleRate, samplesPerBlock);
     chugStabilizer.prepare (sampleRate, samplesPerBlock);
     multibandEngine.prepare (sampleRate, samplesPerBlock);
@@ -310,10 +321,23 @@ void ShredEQAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
 
     analysisSnapshot.prepare (spectralAnalysisEngine.getNumBins());
     controlSampleCounter = 0;
+
+    constexpr double gainSmoothingSeconds = 0.02;
+    inputGain.reset (sampleRate, gainSmoothingSeconds);
+    outputGain.reset (sampleRate, gainSmoothingSeconds);
+    outputTrim.reset (sampleRate, gainSmoothingSeconds);
+    inputGain.setCurrentAndTargetValue (
+        juce::Decibels::decibelsToGain (getParamValue (ShredEQ::ParameterIDs::inputGain)));
+    outputGain.setCurrentAndTargetValue (
+        juce::Decibels::decibelsToGain (getParamValue (ShredEQ::ParameterIDs::outputGain)));
+    outputTrim.setCurrentAndTargetValue (
+        juce::Decibels::decibelsToGain (getParamValue (ShredEQ::ParameterIDs::outputTrim)));
 }
 
 void ShredEQAudioProcessor::releaseResources()
 {
+    parametricEQ.reset();
+    midSideRouter.reset();
     tightCut.reset();
     chugStabilizer.reset();
     multibandEngine.reset();
@@ -326,6 +350,8 @@ void ShredEQAudioProcessor::releaseResources()
 
 void ShredEQAudioProcessor::reset()
 {
+    parametricEQ.reset();
+    midSideRouter.reset();
     tightCut.reset();
     chugStabilizer.reset();
     multibandEngine.reset();
@@ -369,27 +395,25 @@ void ShredEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     for (int channel = totalInputChannels; channel < totalOutputChannels; ++channel)
         buffer.clear (channel, 0, buffer.getNumSamples());
 
-    // Helper lambdas to safely read parameters from APVTS
-    auto getFloatParam = [this] (const char* id) -> float
-    {
-        if (auto* param = apvts.getRawParameterValue (id))
-            return param->load();
-        return 0.0f;
-    };
-    auto getBoolParam = [this] (const char* id) -> bool
-    {
-        if (auto* param = apvts.getRawParameterValue (id))
-            return param->load() > 0.5f;
-        return false;
-    };
+    auto mainBuffer = getBusBuffer (buffer, false, 0);
+    const auto numSamples = mainBuffer.getNumSamples();
+    auto* const* channels = mainBuffer.getArrayOfWritePointers();
+    const auto numChannels = mainBuffer.getNumChannels();
 
-    const auto numSamples = buffer.getNumSamples();
-    auto* const* channels = buffer.getArrayOfWritePointers();
-    const auto numChannels = buffer.getNumChannels();
+    const auto getBoolParam = [this] (const char* id) noexcept
+    {
+        return getParamValue (id) > 0.5f;
+    };
+    const auto getChoiceParam = [this] (const char* id) noexcept
+    {
+        return juce::roundToInt (getParamValue (id));
+    };
 
     // Global bypass check
     if (getBoolParam (ShredEQ::ParameterIDs::globalBypass))
     {
+        parametricEQ.reset();
+        midSideRouter.reset();
         tightCut.reset();
         chugStabilizer.reset();
         multibandEngine.reset();
@@ -397,7 +421,16 @@ void ShredEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         return;
     }
 
-    // Push input audio to engine and pitch detector
+    inputGain.setTargetValue (juce::Decibels::decibelsToGain (
+        getParamValue (ShredEQ::ParameterIDs::inputGain)));
+    for (int sample = 0; sample < numSamples; ++sample)
+    {
+        const auto gain = inputGain.getNextValue();
+        for (int channel = 0; channel < numChannels; ++channel)
+            channels[channel][sample] *= gain;
+    }
+
+    // Feed the analysis layer from the conditioned main input.
     if (getBoolParam (ShredEQ::ParameterIDs::analyzerEnable))
     {
         spectralAnalysisEngine.setEnabled (true);
@@ -434,137 +467,236 @@ void ShredEQAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         resonanceSuppressor.updateScan (numSamples, resonanceDetector);
     }
 
-    // 1. Update TightCut parameters
-    tightCut.setEnabled (getBoolParam (ShredEQ::ParameterIDs::TightCut::enabled));
-    tightCut.setFrequency (getFloatParam (ShredEQ::ParameterIDs::TightCut::frequency));
-    
-    const auto tcSlopeChoice = static_cast<int> (std::round (getFloatParam (ShredEQ::ParameterIDs::TightCut::slope)));
-    int slopeDb = 24;
-    if (tcSlopeChoice == 0) slopeDb = 12;
-    else if (tcSlopeChoice == 1) slopeDb = 18;
-    else if (tcSlopeChoice == 2) slopeDb = 24;
-    else if (tcSlopeChoice == 3) slopeDb = 36;
-    tightCut.setSlope (slopeDb);
+    const auto tightCutEnabled = getBoolParam (ShredEQ::ParameterIDs::TightCut::enabled);
+    const auto tightCutPlacement = static_cast<ShredEQ::DSP::TightCut::Placement> (
+        getChoiceParam (ShredEQ::ParameterIDs::TightCut::placement));
+    const auto tightCutRouting = static_cast<ShredEQ::DSP::TightCut::Routing> (
+        getChoiceParam (ShredEQ::ParameterIDs::TightCut::routing));
+    constexpr std::array<int, 4> tightCutSlopes { 12, 18, 24, 36 };
+    const auto tightCutSlopeIndex = static_cast<std::size_t> (juce::jlimit (
+        0, 3, getChoiceParam (ShredEQ::ParameterIDs::TightCut::slope)));
 
-    tightCut.setResonance (getFloatParam (ShredEQ::ParameterIDs::TightCut::resonance));
-    tightCut.setPunchRatio (getFloatParam (ShredEQ::ParameterIDs::TightCut::punchRatio));
-    tightCut.setPunchGainDb (getFloatParam (ShredEQ::ParameterIDs::TightCut::punchGain));
-    tightCut.setPunchQ (getFloatParam (ShredEQ::ParameterIDs::TightCut::punchQ));
-    
-    const auto tcPlacementChoice = static_cast<int> (std::round (getFloatParam (ShredEQ::ParameterIDs::TightCut::placement)));
-    tightCut.setPlacement (static_cast<ShredEQ::DSP::TightCut::Placement> (tcPlacementChoice));
-    
-    const auto tcRoutingChoice = static_cast<int> (std::round (getFloatParam (ShredEQ::ParameterIDs::TightCut::routing)));
-    tightCut.setRouting (static_cast<ShredEQ::DSP::TightCut::Routing> (tcRoutingChoice));
-    
+    tightCut.setEnabled (tightCutEnabled);
+    tightCut.setFrequency (getParamValue (ShredEQ::ParameterIDs::TightCut::frequency));
+    tightCut.setSlope (tightCutSlopes[tightCutSlopeIndex]);
+    tightCut.setResonance (getParamValue (ShredEQ::ParameterIDs::TightCut::resonance));
+    tightCut.setPunchRatio (getParamValue (ShredEQ::ParameterIDs::TightCut::punchRatio));
+    tightCut.setPunchGainDb (getParamValue (ShredEQ::ParameterIDs::TightCut::punchGain));
+    tightCut.setPunchQ (getParamValue (ShredEQ::ParameterIDs::TightCut::punchQ));
+    tightCut.setPlacement (tightCutPlacement);
+    tightCut.setRouting (tightCutRouting);
     tightCut.setListenRemoved (getBoolParam (ShredEQ::ParameterIDs::TightCut::listenRemoved));
 
-    // 2. Update ChugStabilizer parameters
-    chugStabilizer.setEnabled (getBoolParam (ShredEQ::ParameterIDs::Chug::enabled));
-    chugStabilizer.setTargetFrequency (getFloatParam (ShredEQ::ParameterIDs::Chug::frequency));
-    chugStabilizer.setBandwidthOctaves (getFloatParam (ShredEQ::ParameterIDs::Chug::bandwidth));
-    chugStabilizer.setMaximumReductionDb (getFloatParam (ShredEQ::ParameterIDs::Chug::maxReduction));
-    chugStabilizer.setThresholdDb (getFloatParam (ShredEQ::ParameterIDs::Chug::threshold));
+    const auto chugEnabled = getBoolParam (ShredEQ::ParameterIDs::Chug::enabled);
+    chugStabilizer.setEnabled (chugEnabled);
+    chugStabilizer.setTargetFrequency (getParamValue (ShredEQ::ParameterIDs::Chug::frequency));
+    chugStabilizer.setBandwidthOctaves (getParamValue (ShredEQ::ParameterIDs::Chug::bandwidth));
+    chugStabilizer.setMaximumReductionDb (getParamValue (ShredEQ::ParameterIDs::Chug::maxReduction));
+    chugStabilizer.setThresholdDb (getParamValue (ShredEQ::ParameterIDs::Chug::threshold));
     chugStabilizer.setAutomaticThreshold (false);
-    chugStabilizer.setAttackMs (getFloatParam (ShredEQ::ParameterIDs::Chug::attack));
-    chugStabilizer.setHoldMs (getFloatParam (ShredEQ::ParameterIDs::Chug::hold));
-    chugStabilizer.setReleaseMs (getFloatParam (ShredEQ::ParameterIDs::Chug::release));
-    chugStabilizer.setPreservePick (getFloatParam (ShredEQ::ParameterIDs::Chug::preservePick) > 0.0f);
-    chugStabilizer.setTransientSensitivity (getFloatParam (ShredEQ::ParameterIDs::Chug::transientSens) / 100.0);
-    chugStabilizer.setDominanceSensitivity (getFloatParam (ShredEQ::ParameterIDs::Chug::dominanceSens) / 100.0);
+    chugStabilizer.setAttackMs (getParamValue (ShredEQ::ParameterIDs::Chug::attack));
+    chugStabilizer.setHoldMs (getParamValue (ShredEQ::ParameterIDs::Chug::hold));
+    chugStabilizer.setReleaseMs (getParamValue (ShredEQ::ParameterIDs::Chug::release));
+    chugStabilizer.setPreservePick (
+        getParamValue (ShredEQ::ParameterIDs::Chug::preservePick) > 0.0f);
+    chugStabilizer.setTransientSensitivity (
+        getParamValue (ShredEQ::ParameterIDs::Chug::transientSens) / 100.0);
+    chugStabilizer.setDominanceSensitivity (
+        getParamValue (ShredEQ::ParameterIDs::Chug::dominanceSens) / 100.0);
 
-    // 3. Update MultibandEngine parameters
-    multibandEngine.setEnabled (getBoolParam (ShredEQ::ParameterIDs::multibandEnabled));
-    multibandEngine.setCrossoverHz (0, getFloatParam (ShredEQ::ParameterIDs::multibandCrossovers[0]));
-    multibandEngine.setCrossoverHz (1, getFloatParam (ShredEQ::ParameterIDs::multibandCrossovers[1]));
-    multibandEngine.setCrossoverHz (2, getFloatParam (ShredEQ::ParameterIDs::multibandCrossovers[2]));
+    constexpr std::array<int, 6> bandSlopes { 6, 12, 18, 24, 36, 48 };
+    constexpr std::array<double, 5> lookaheadMilliseconds { 0.0, 0.5, 1.0, 2.0, 5.0 };
+
+    for (std::size_t index = 0; index < ShredEQ::ParameterIDs::bands.size(); ++index)
+    {
+        const auto& ids = ShredEQ::ParameterIDs::bands[index];
+        auto& band = parametricEQ[index];
+        const auto dynamicMode = getChoiceParam (ids.dynamicMode);
+        const auto slopeIndex = static_cast<std::size_t> (
+            juce::jlimit (0, 5, getChoiceParam (ids.slope)));
+        const auto lookaheadIndex = static_cast<std::size_t> (
+            juce::jlimit (0, 4, getChoiceParam (ids.lookahead)));
+        const auto trackingSource = getChoiceParam (ids.trackingSource);
+
+        band.setEnabled (getBoolParam (ids.enabled));
+        band.setStage (static_cast<ShredEQ::DSP::BandStage> (getChoiceParam (ids.stage)));
+        band.setFilterType (
+            static_cast<ShredEQ::DSP::BandFilterType> (getChoiceParam (ids.type)));
+        band.setFrequency (getParamValue (ids.frequency));
+        band.setGainDb (getParamValue (ids.gain));
+        band.setQ (getParamValue (ids.q));
+        band.setSlope (bandSlopes[slopeIndex]);
+        band.setRoutingMode (
+            static_cast<ShredEQ::DSP::StereoRoutingMode> (getChoiceParam (ids.route)));
+        band.setDynamicMode (dynamicMode);
+        band.setDynamicsEnabled (dynamicMode != 0);
+        band.setDynamicRangeDb (getParamValue (ids.dynamicRange));
+        band.setThresholdDb (getParamValue (ids.threshold));
+        band.setRatio (getParamValue (ids.ratio));
+        band.setAttackMs (getParamValue (ids.attack));
+        band.setHoldMs (getParamValue (ids.hold));
+        band.setReleaseMs (getParamValue (ids.release));
+        band.setKneeDb (getParamValue (ids.knee));
+        band.setDetectorSource (getChoiceParam (ids.detectorSource));
+        band.setDetectorFrequency (getParamValue (ids.detectorFrequency));
+        band.setDetectorQ (getParamValue (ids.detectorQ));
+        band.setTrackingSource (trackingSource);
+        band.setTrackingHarmonic (getChoiceParam (ids.trackingHarmonic) + 1);
+        band.setNoteFollowerEnabled (trackingSource != 0);
+        band.setLookaheadMs (lookaheadMilliseconds[lookaheadIndex]);
+    }
+
+    const auto multibandEnabled = getBoolParam (ShredEQ::ParameterIDs::multibandEnabled);
+    multibandEngine.setEnabled (multibandEnabled);
+    multibandEngine.setCrossoverHz (
+        0, getParamValue (ShredEQ::ParameterIDs::multibandCrossovers[0]));
+    multibandEngine.setCrossoverHz (
+        1, getParamValue (ShredEQ::ParameterIDs::multibandCrossovers[1]));
+    multibandEngine.setCrossoverHz (
+        2, getParamValue (ShredEQ::ParameterIDs::multibandCrossovers[2]));
 
     for (std::size_t index = 0; index < 4; ++index)
     {
         const auto& zone = ShredEQ::ParameterIDs::multibandZones[index];
-        multibandEngine.setZoneGainDb (index, getFloatParam (zone.gain));
-        multibandEngine.setZoneThresholdDb (index, getFloatParam (zone.threshold));
-        multibandEngine.setZoneRatio (index, getFloatParam (zone.ratio));
-        multibandEngine.setZoneAttackMs (index, getFloatParam (zone.attack));
-        multibandEngine.setZoneReleaseMs (index, getFloatParam (zone.release));
-        multibandEngine.setZoneTransientEmphasis (index, getFloatParam (zone.transientEmphasis));
-        multibandEngine.setZoneSustainEmphasis (index, getFloatParam (zone.sustainEmphasis));
-        
-        const auto placementChoice = static_cast<int> (std::round (getFloatParam (zone.placement)));
-        multibandEngine.setZonePlacement (index, static_cast<ShredEQ::DSP::MultibandZone::Placement> (placementChoice));
-        
-        const auto detChoice = static_cast<int> (std::round (getFloatParam (zone.detectorSource)));
-        multibandEngine.setZoneDetectorSource (index, static_cast<ShredEQ::DSP::DetectorSource> (detChoice));
-        
+        multibandEngine.setZoneGainDb (index, getParamValue (zone.gain));
+        multibandEngine.setZoneThresholdDb (index, getParamValue (zone.threshold));
+        multibandEngine.setZoneRatio (index, getParamValue (zone.ratio));
+        multibandEngine.setZoneAttackMs (index, getParamValue (zone.attack));
+        multibandEngine.setZoneReleaseMs (index, getParamValue (zone.release));
+        multibandEngine.setZoneTransientEmphasis (
+            index, getParamValue (zone.transientEmphasis));
+        multibandEngine.setZoneSustainEmphasis (
+            index, getParamValue (zone.sustainEmphasis));
+        multibandEngine.setZonePlacement (
+            index, static_cast<ShredEQ::DSP::MultibandZone::Placement> (
+                getChoiceParam (zone.placement)));
+        multibandEngine.setZoneDetectorSource (
+            index, static_cast<ShredEQ::DSP::DetectorSource> (
+                getChoiceParam (zone.detectorSource)));
         multibandEngine.setZoneAutoThreshold (index, getBoolParam (zone.autoThreshold));
-        
-        const auto modeChoice = static_cast<int> (std::round (getFloatParam (zone.mode)));
-        multibandEngine.setZoneUpward (index, modeChoice == 1);
+        multibandEngine.setZoneUpward (index, getChoiceParam (zone.mode) == 1);
     }
 
-    // Update ResonanceSuppressor parameters
-    for (int i = 0; i < 6; ++i)
+    bool anyResonanceSlotEnabled = false;
+    for (int i = 0; i < ShredEQ::DSP::ResonanceSuppressor::numSlots; ++i)
     {
         const auto& slotIDs = ShredEQ::ParameterIDs::resonanceSlots[static_cast<std::size_t> (i)];
         auto& slot = resonanceSuppressor.getSlot (i);
+        const auto slotEnabled = getBoolParam (slotIDs.enabled);
 
-        slot.setEnabled (getBoolParam (slotIDs.enabled));
-        slot.setFrequency (getFloatParam (slotIDs.frequency));
-        slot.setQ (getFloatParam (slotIDs.q));
-        slot.setMaxDepthDb (getFloatParam (slotIDs.maxDepth));
-        slot.setAttackMs (getFloatParam (slotIDs.attack));
-        slot.setReleaseMs (getFloatParam (slotIDs.release));
-        slot.setPersistenceRequirement (getFloatParam (slotIDs.persistence));
-
-        const auto modeChoice = static_cast<int> (std::round (getFloatParam (slotIDs.mode)));
-        slot.setIsStatic (modeChoice == 0);
-
-        const auto placementChoice = static_cast<int> (std::round (getFloatParam (slotIDs.placement)));
-        slot.setPlacement (static_cast<ShredEQ::DSP::StereoRoutingMode> (placementChoice));
-
+        anyResonanceSlotEnabled = anyResonanceSlotEnabled || slotEnabled;
+        slot.setEnabled (slotEnabled);
+        slot.setFrequency (getParamValue (slotIDs.frequency));
+        slot.setQ (getParamValue (slotIDs.q));
+        slot.setMaxDepthDb (getParamValue (slotIDs.maxDepth));
+        slot.setAttackMs (getParamValue (slotIDs.attack));
+        slot.setReleaseMs (getParamValue (slotIDs.release));
+        slot.setPersistenceRequirement (getParamValue (slotIDs.persistence));
+        slot.setIsStatic (getChoiceParam (slotIDs.mode) == 0);
+        slot.setPlacement (static_cast<ShredEQ::DSP::StereoRoutingMode> (
+            getChoiceParam (slotIDs.placement)));
         slot.setFreeze (getBoolParam (slotIDs.freeze));
-
-        slot.updateDepthTarget (resonanceDetector);
+        if (slotEnabled)
+            slot.updateDepthTarget (resonanceDetector);
     }
 
-    // 4. Extract sidechain buffer if the bus is active
-    const juce::AudioBuffer<float>* sidechainBufferPtr = nullptr;
-    juce::AudioBuffer<float> sidechainBuffer;
-    if (auto* bus = getBus (true, 1))
+    auto sidechainBuffer = getBusBuffer (buffer, true, 1);
+    const auto* sidechainBus = getBus (true, 1);
+    const auto sidechainEnabled = sidechainBus != nullptr && sidechainBus->isEnabled();
+    const auto* sidechainBufferPtr = sidechainEnabled ? &sidechainBuffer : nullptr;
+    const float* const* sidechainChannels = sidechainEnabled
+        ? sidechainBuffer.getArrayOfReadPointers() : nullptr;
+    const auto numSidechainChannels = sidechainEnabled ? sidechainBuffer.getNumChannels() : 0;
+
+    const auto processTightCut = [&]() noexcept
     {
-        if (bus->isEnabled())
+        if (!tightCutEnabled)
+            return;
+
+        if (numChannels == 2 && tightCutRouting != ShredEQ::DSP::TightCut::Routing::stereo)
         {
-            sidechainBuffer = getBusBuffer (buffer, true, 1);
-            sidechainBufferPtr = &sidechainBuffer;
+            midSideRouter.setEnabled (true);
+            midSideRouter.processEncode (channels, numChannels, numSamples);
+            tightCut.process (channels, numChannels, numSamples, true);
+            midSideRouter.processDecode (channels, numChannels, numSamples);
+            midSideRouter.setEnabled (false);
         }
-    }
+        else
+        {
+            tightCut.process (channels, numChannels, numSamples, false);
+        }
+    };
 
-    // 5. Process DSP Chain
-    const auto placement = static_cast<ShredEQ::DSP::TightCut::Placement> (tcPlacementChoice);
-
-    // Pre Stage A processing
-    if (placement == ShredEQ::DSP::TightCut::Placement::preStageA)
+    const auto processParametricStage = [&] (ShredEQ::DSP::BandStage stage) noexcept
     {
-        tightCut.process (channels, numChannels, numSamples);
-    }
+        bool hasMidSideBand = false;
 
-    // Chug Stabilizer processing
-    chugStabilizer.process (channels, numChannels, numSamples);
+        for (auto& band : parametricEQ.getBands())
+        {
+            if (!band.isEnabled() || band.getStage() != stage)
+                continue;
 
-    // Stage A / EQ processing would happen here
+            const auto routing = band.getRoutingMode();
+            if (routing == ShredEQ::DSP::StereoRoutingMode::mid
+                || routing == ShredEQ::DSP::StereoRoutingMode::side)
+            {
+                hasMidSideBand = true;
+            }
+            else
+            {
+                band.process (channels, numChannels, numSamples, false,
+                              sidechainChannels, numSidechainChannels);
+            }
+        }
 
-    // Multiband Engine processing
-    multibandEngine.process (buffer, sidechainBufferPtr);
+        if (numChannels != 2 || !hasMidSideBand)
+            return;
 
-    // Resonance Suppressor processing
-    // Documenting insertion point choice: Chosen to run as a late correction stage after
-    // the main Tone EQ / Multiband processing to correct room or cabinet resonances.
-    resonanceSuppressor.process (buffer);
+        midSideRouter.setEnabled (true);
+        midSideRouter.processEncode (channels, numChannels, numSamples);
+        for (auto& band : parametricEQ.getBands())
+        {
+            const auto routing = band.getRoutingMode();
+            if (band.isEnabled() && band.getStage() == stage
+                && (routing == ShredEQ::DSP::StereoRoutingMode::mid
+                    || routing == ShredEQ::DSP::StereoRoutingMode::side))
+            {
+                band.process (channels, numChannels, numSamples, true,
+                              sidechainChannels, numSidechainChannels);
+            }
+        }
+        midSideRouter.processDecode (channels, numChannels, numSamples);
+        midSideRouter.setEnabled (false);
+    };
 
-    // Post Stage A processing
-    if (placement == ShredEQ::DSP::TightCut::Placement::postStageA)
+    if (tightCutPlacement == ShredEQ::DSP::TightCut::Placement::preStageA)
+        processTightCut();
+
+    if (chugEnabled)
+        chugStabilizer.process (channels, numChannels, numSamples);
+
+    processParametricStage (ShredEQ::DSP::BandStage::stageA);
+
+    if (tightCutPlacement == ShredEQ::DSP::TightCut::Placement::postStageA)
+        processTightCut();
+
+    if (anyResonanceSlotEnabled || resonanceSuppressor.getAuditionCardIndex() >= 0)
+        resonanceSuppressor.process (channels, numChannels, numSamples);
+
+    if (multibandEnabled)
+        multibandEngine.process (mainBuffer, sidechainBufferPtr);
+
+    processParametricStage (ShredEQ::DSP::BandStage::stageB);
+
+    outputGain.setTargetValue (juce::Decibels::decibelsToGain (
+        getParamValue (ShredEQ::ParameterIDs::outputGain)));
+    outputTrim.setTargetValue (juce::Decibels::decibelsToGain (
+        getParamValue (ShredEQ::ParameterIDs::outputTrim)));
+    for (int sample = 0; sample < numSamples; ++sample)
     {
-        tightCut.process (channels, numChannels, numSamples);
+        const auto gain = outputGain.getNextValue() * outputTrim.getNextValue();
+        for (int channel = 0; channel < numChannels; ++channel)
+            channels[channel][sample] *= gain;
     }
 }
 
